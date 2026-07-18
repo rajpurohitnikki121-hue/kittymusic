@@ -213,7 +213,7 @@ class Thumbnail:
 
             draw.text(
                 (45, 22),
-                _decode_f(),
+               "𐙚 Kitty Music",
                 fill=(255, 255, 255, 230),
                 font=self.signature_font
             )
