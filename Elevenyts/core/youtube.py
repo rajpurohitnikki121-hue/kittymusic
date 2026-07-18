@@ -386,8 +386,7 @@ class YouTube:
                 "retries": 2,
                 "fragment_retries": 2,
                 "extractor_retries": 5,
-                "sleep_interval_requests": 1,
-                "extractor_args": {"youtube": {"player_client": ["android", "web"]}},
+                "sleep_interval_requests": 1
             }
 
             if video:
