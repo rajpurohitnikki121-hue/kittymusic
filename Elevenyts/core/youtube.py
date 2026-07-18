@@ -411,11 +411,11 @@ class YouTube:
                     ],
                 }
             else:
-                ydl_opts = {
-                    **base_opts,
-                    "format": "bestaudio[ext=m4a]/bestaudio[acodec=opus]/bestaudio/best",
-                    "postprocessors": [],
-                }
+    ydl_opts = {
+        **base_opts,
+        "format": "bestaudio/best",
+        "postprocessors": [],
+    }
 
             ydl_opts_cookie = {
                 **ydl_opts,
