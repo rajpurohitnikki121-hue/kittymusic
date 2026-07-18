@@ -411,17 +411,16 @@ class YouTube:
                     ],
                 }
             else:
-    ydl_opts = {
-        **base_opts,
-        "format": "bestaudio/best",
-        "postprocessors": [],
-    }
+                ydl_opts = {
+                    **base_opts,
+                    "format": "bestaudio/best",
+                    "postprocessors": [],
+                }
 
             ydl_opts_cookie = {
                 **ydl_opts,
                 "cookiefile": cookie,
             }
-
             def _download(ydl_runtime_opts):
                 ydl_instance = None
                 try:
