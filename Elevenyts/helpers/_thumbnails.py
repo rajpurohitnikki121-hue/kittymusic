@@ -152,24 +152,27 @@ class Thumbnail:
         try:
 
             with Image.open(temp) as temp_img:
-                base = temp_img.resize(size).convert("RGBA")
+    base = temp_img.resize(size).convert("RGBA")
 
-            bg = base.filter(ImageFilter.GaussianBlur(28))
+# Premium Blur
+bg = base.filter(ImageFilter.GaussianBlur(18))
 
-            bg = ImageEnhance.Brightness(bg).enhance(0.25)
+# Background thoda visible rahe
+bg = ImageEnhance.Brightness(bg).enhance(0.45)
 
-            bg = ImageEnhance.Contrast(bg).enhance(1.4)
+# Soft contrast
+bg = ImageEnhance.Contrast(bg).enhance(1.15)
 
-            overlay = Image.new(
-                "RGBA",
-                size,
-                (0, 0, 0, 120)
-            )
+# Light black overlay
+overlay = Image.new(
+    "RGBA",
+    size,
+    (0, 0, 0, 90)
+)
 
-            bg = Image.alpha_composite(bg, overlay)
-
-            panel = Image.new(
-                "RGBA",
+bg = Image.alpha_composite(bg, overlay)
+panel = Image.new(
+    "RGBA",
                 (PANEL_W, PANEL_H),
                 (10, 10, 10, 155)
             )
