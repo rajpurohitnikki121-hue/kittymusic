@@ -117,7 +117,7 @@
   "playlist_queued": "<blockquote>𓍢ִ໋𐙚 <b>Playlist Added</b></blockquote>\n<blockquote>✦ <b>{0}</b> tracks have been added to the queue.</blockquote>",
 "queue_curr": "<blockquote>♫ <b>Now Playing</b></blockquote>\n<blockquote>✦ <b>Title</b> ─ <a href=\"{0}\">{1}</a>\n𐙚 <b>Duration</b> ─ {2}</blockquote>\n\n",
 "queue_item": "<b>{0}.</b> {1}\n𐙚 {2}\n\n",
-"queue_fetching": "𓍢ִ໋𐙚 Fetching queue..."
+"queue_fetching": "𓍢ִ໋𐙚 Fetching queue...",
   "restarting": "ʀᴇꜱᴛᴀʀᴛɪɴɢ...",
   "restarted": "ʀᴇꜱᴛᴀʀᴛ ɪɴ ᴘʀᴏɢʀᴇꜱꜱ. ᴅᴏɴ'ᴛ ᴡᴏʀʀᴀ, ɪᴛ'ʟʟ ᴏɴʟʏ ᴛᴀᴋᴇ ᴀ ꜰᴇᴡ ꜱᴇᴄᴏɴᴅꜱ… ᴍᴀʏʙᴇ.",
   "start_pm": "✦ ʜᴇʏ {0}, ⊚ ᴛʜɪꜱ ɪꜱ {1}!\n\n✨ ᴀ ᴘʀᴇᴍɪᴜᴍ ᴍᴜꜱɪᴄ ᴘʟᴀʏᴇʀ ʙᴏᴛ ꜰᴏʀ ᴛᴇʟᴇɢʀᴀᴍ.\n💖 ꜱᴛʀᴇᴀᴍ ʏᴏᴜʀ ꜰᴀᴠᴏʀɪᴛᴇ ꜱᴏɴɢꜱ ɪɴ ᴠᴏɪᴄᴇ ᴄʜᴀᴛ.\n\n⚡ ᴛᴀᴘ ᴛʜᴇ ʙᴜᴛᴛᴏɴꜱ ʙᴇʟᴏᴡ ᴛᴏ ɢᴇᴛ ꜱᴛᴀʀᴛᴇᴅ.\n•── ⋅ ⋅ ────── ⋅᯽⋅ ────── ⋅ ⋅ ⋅──",
