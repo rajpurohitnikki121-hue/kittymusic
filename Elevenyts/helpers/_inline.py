@@ -64,13 +64,6 @@ class Inline:
                         text="▢", callback_data=f"controls stop {chat_id}", style=ButtonStyle.SUCCESS),
                 ]
             )
-            # Delete button as full-width button at bottom
-            keyboard.append(
-                [
-                    self.ikb(
-                        text="ᴅᴇʟᴇᴛᴇ", callback_data=f"controls close {chat_id}", style=ButtonStyle.DANGER),
-                ]
-            )
         return self.ikm(keyboard)
 
     def help_markup(
@@ -134,20 +127,18 @@ class Inline:
     ) -> types.InlineKeyboardMarkup:
         return self.ikm(
             [
-                [
-                    self.ikb(
-                        text="▷", callback_data=f"controls resume {chat_id}", style=ButtonStyle.SUCCESS),
-                    self.ikb(
-                        text="∣ ∣", callback_data=f"controls pause {chat_id}", style=ButtonStyle.PRIMARY),
-                    self.ikb(
-                        text=">>", callback_data=f"controls skip {chat_id}", style=ButtonStyle.PRIMARY),
-                    self.ikb(
-                        text="▣", callback_data=f"controls stop {chat_id}", style=ButtonStyle.DANGER),
-                ],
-                [
-                    self.ikb(
-                        text="ᴅᴇʟᴇᴛᴇ", callback_data=f"controls close {chat_id}", style=ButtonStyle.DANGER),
-                ]
+               [
+    self.ikb(
+        text="▷", callback_data=f"controls resume {chat_id}", style=ButtonStyle.SUCCESS),
+    self.ikb(
+        text="II", callback_data=f"controls pause {chat_id}", style=ButtonStyle.PRIMARY),
+    self.ikb(
+        text="↻", callback_data=f"controls replay {chat_id}", style=ButtonStyle.SUCCESS),
+    self.ikb(
+        text="‣‣I", callback_data=f"controls skip {chat_id}", style=ButtonStyle.PRIMARY),
+    self.ikb(
+        text="▢", callback_data=f"controls stop {chat_id}", style=ButtonStyle.DANGER),
+               ]
             ]
         )
 
@@ -188,9 +179,17 @@ class Inline:
                 )
             ],
             [
-                self.ikb(text=lang["help"], callback_data="help", style=ButtonStyle.SUCCESS),
-                self.ikb(text="ꜱᴏᴜʀᴄᴇ", url="https://github.com/elevenyts/ArtistMusic", style=ButtonStyle.SUCCESS),
-            ],
+    self.ikb(
+        text="𐙚 ᴍᴀʟᴋɪɴ",
+        url="https://t.me/kaal_ki_laddo",
+        style=ButtonStyle.SUCCESS,
+    ),
+    self.ikb(
+        text="ʜᴇʟᴘ",
+        callback_data="help",
+        style=ButtonStyle.SUCCESS,
+    ),
+],
             [
                 self.ikb(text=lang["support"], url=config.SUPPORT_CHAT, style=ButtonStyle.PRIMARY),
                 self.ikb(text=lang["channel"], url=config.SUPPORT_CHANNEL, style=ButtonStyle.PRIMARY),
