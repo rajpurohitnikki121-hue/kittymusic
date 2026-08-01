@@ -142,54 +142,55 @@ class Thumbnail:
             return config.DEFAULT_THUMB
 
     def _generate_sync(
-        self,
-        temp: str,
-        output: str,
-        song: Track,
-        size=(1280, 720)
-    ) -> str:
+    self,
+    temp: str,
+    output: str,
+    song: Track,
+    size=(1280, 720)
+) -> str:
 
-        try:
-    with Image.open(temp) as temp_img:
-        base = temp_img.resize(size).convert("RGBA")
+    try:
+        with Image.open(temp) as temp_img:
+            base = temp_img.resize(size).convert("RGBA")
 
-    # Premium Blur
-    bg = base.filter(ImageFilter.GaussianBlur(18))
+        # Premium Blur
+        bg = base.filter(ImageFilter.GaussianBlur(18))
 
-    # Background thoda visible rahe
-    bg = ImageEnhance.Brightness(bg).enhance(0.45)
+        # Background thoda visible rahe
+        bg = ImageEnhance.Brightness(bg).enhance(0.45)
 
-    # Soft contrast
-    bg = ImageEnhance.Contrast(bg).enhance(1.15)
+        # Soft contrast
+        bg = ImageEnhance.Contrast(bg).enhance(1.15)
 
-    # Light black overlay
-    overlay = Image.new(
-        "RGBA",
-        size,
-        (0, 0, 0, 90)
-    )
+        # Light black overlay
+        overlay = Image.new(
+            "RGBA",
+            size,
+            (0, 0, 0, 90)
+        )
 
-bg = Image.alpha_composite(bg, overlay)
-panel = Image.new(
-    "RGBA",
-                (PANEL_W, PANEL_H),
-                (10, 10, 10, 155)
-            )
+        bg = Image.alpha_composite(bg, overlay)
 
-            border = Image.new(
-                "RGBA",
-                (PANEL_W, PANEL_H),
-                (0, 0, 0, 0)
-            )
+        panel = Image.new(
+            "RGBA",
+            (PANEL_W, PANEL_H),
+            (10, 10, 10, 155)
+        )
 
-            bd = ImageDraw.Draw(border)
+                border = Image.new(
+            "RGBA",
+            (PANEL_W, PANEL_H),
+            (0, 0, 0, 0)
+        )
 
-            bd.rounded_rectangle(
-                (0, 0, PANEL_W - 1, PANEL_H - 1),
-                radius=42,
-                outline=(0, 255, 255, 220),
-                width=3
-            )
+        bd = ImageDraw.Draw(border)
+
+        bd.rounded_rectangle(
+    (0, 0, PANEL_W - 1, PANEL_H - 1),
+    radius=42,
+    outline=(0, 255, 255, 220),
+    width=3
+        )
 
             mask = Image.new(
                 "L",
@@ -223,9 +224,9 @@ panel = Image.new(
             thumb = base.resize((THUMB_W, THUMB_H))
 
             tmask = Image.new(
-                "L",
-                thumb.size,
-                0
+    "L",
+    thumb.size,
+    0
             )
 
             ImageDraw.Draw(tmask).rounded_rectangle(
