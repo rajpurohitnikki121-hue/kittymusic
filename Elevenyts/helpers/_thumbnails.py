@@ -150,9 +150,24 @@ class Thumbnail:
     ) -> str:
 
         try:
+    with Image.open(temp) as temp_img:
+        base = temp_img.resize(size).convert("RGBA")
 
-            with Image.open(temp) as temp_img:
-    base = temp_img.resize(size).convert("RGBA")
+    # Premium Blur
+    bg = base.filter(ImageFilter.GaussianBlur(18))
+
+    # Background thoda visible rahe
+    bg = ImageEnhance.Brightness(bg).enhance(0.45)
+
+    # Soft contrast
+    bg = ImageEnhance.Contrast(bg).enhance(1.15)
+
+    # Light black overlay
+    overlay = Image.new(
+        "RGBA",
+        size,
+        (0, 0, 0, 90)
+    )
 
 # Premium Blur
 bg = base.filter(ImageFilter.GaussianBlur(18))
