@@ -185,8 +185,8 @@ class Thumbnail:
             bd.rounded_rectangle(
                 (0, 0, PANEL_W - 1, PANEL_H - 1),
                 radius=34,
-                outline=(255, 120, 120, 210),
-                width=2
+                outline=(255, 95, 95, 165),
+                width=3
             )
 
             mask = Image.new(
@@ -214,7 +214,7 @@ class Thumbnail:
             draw.text(
     (58, 24),
     "Kitty Music",
-    fill=(255, 80, 80, 180),
+    fill=(255, 255, 255, 235),
     font=self.signature_font
             )
 
@@ -228,7 +228,7 @@ class Thumbnail:
 
             ImageDraw.Draw(tmask).rounded_rectangle(
                 (0, 0, THUMB_W, THUMB_H),
-                radius=34,
+                radius=38,
                 fill=255
             )
 
