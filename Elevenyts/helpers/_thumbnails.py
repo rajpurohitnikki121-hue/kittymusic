@@ -213,7 +213,7 @@ class Thumbnail:
 
             draw.text(
     (45, 22),
-    "𝒌𝒊𝒕𝒕𝒚 𝑋 𝑀𝑢𝑠𝑖𝑐 !!",
+    "Kitty Music",
     fill=(255, 255, 255, 230),
     font=self.signature_font
             )
@@ -265,8 +265,8 @@ class Thumbnail:
             )
 
             meta_text = (
-                f"Now Playing  •  YouTube  •  "
-                f"{song.view_count or 'Unknown Views'}"
+    f"Now Playing • Kitty Music • "
+    f"{song.view_count or 'Unknown Views'}"
             )
 
             draw.text(
