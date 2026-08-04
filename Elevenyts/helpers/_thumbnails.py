@@ -163,7 +163,7 @@ class Thumbnail:
             overlay = Image.new(
                 "RGBA",
                 size,
-                (0, 0, 0, 120)
+                (0, 0, 0, 170)
             )
 
             bg = Image.alpha_composite(bg, overlay)
@@ -171,7 +171,7 @@ class Thumbnail:
             panel = Image.new(
                 "RGBA",
                 (PANEL_W, PANEL_H),
-                (10, 10, 10, 155)
+                (18, 18, 18, 210)
             )
 
             border = Image.new(
@@ -185,8 +185,8 @@ class Thumbnail:
             bd.rounded_rectangle(
                 (0, 0, PANEL_W - 1, PANEL_H - 1),
                 radius=42,
-                outline=(255, 45, 45, 235),
-                width=3
+                outline=(255, 60, 60, 180),
+                width=4
             )
 
             mask = Image.new(
