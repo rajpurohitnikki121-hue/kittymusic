@@ -87,17 +87,17 @@ class Thumbnail:
 
             self.title_font = ImageFont.truetype(
                 "Elevenyts/helpers/Raleway-Bold.ttf",
-                42
+                54
             )
 
             self.regular_font = ImageFont.truetype(
                 "Elevenyts/helpers/Inter-Light.ttf",
-                24
+                28
             )
 
             self.signature_font = ImageFont.truetype(
                 "Elevenyts/helpers/Raleway-Bold.ttf",
-                28
+                34
             )
 
         except OSError:
@@ -154,16 +154,16 @@ class Thumbnail:
             with Image.open(temp) as temp_img:
                 base = temp_img.resize(size).convert("RGBA")
 
-            bg = base.filter(ImageFilter.GaussianBlur(28))
+            bg = base.filter(ImageFilter.GaussianBlur(38))
 
-            bg = ImageEnhance.Brightness(bg).enhance(0.25)
+            bg = ImageEnhance.Brightness(bg).enhance(0.17)
 
-            bg = ImageEnhance.Contrast(bg).enhance(1.4)
+            bg = ImageEnhance.Contrast(bg).enhance(1.65)
 
             overlay = Image.new(
                 "RGBA",
                 size,
-                (0, 0, 0, 170)
+                (0, 0, 0, 195)
             )
 
             bg = Image.alpha_composite(bg, overlay)
@@ -184,8 +184,8 @@ class Thumbnail:
 
             bd.rounded_rectangle(
                 (0, 0, PANEL_W - 1, PANEL_H - 1),
-                radius=42,
-                outline=(255, 60, 60, 180),
+                radius=50,
+                outline=(255, 80, 80, 170),
                 width=4
             )
 
@@ -197,7 +197,7 @@ class Thumbnail:
 
             ImageDraw.Draw(mask).rounded_rectangle(
                 (0, 0, PANEL_W, PANEL_H),
-                radius=42,
+                radius=50,
                 fill=255
             )
 
@@ -228,7 +228,7 @@ class Thumbnail:
 
             ImageDraw.Draw(tmask).rounded_rectangle(
                 (0, 0, THUMB_W, THUMB_H),
-                radius=28,
+                radius=40,
                 fill=255
             )
 
