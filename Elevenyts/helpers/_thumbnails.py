@@ -35,24 +35,24 @@ PANEL_W, PANEL_H = 1030, 610
 PANEL_X = (1280 - PANEL_W) // 2
 PANEL_Y = 55
 
-THUMB_W, THUMB_H = 930, 420
+THUMB_W, THUMB_H = 965, 430
 THUMB_X = PANEL_X + (PANEL_W - THUMB_W) // 2
-THUMB_Y = PANEL_Y + 30
+THUMB_Y = PANEL_Y + 22
 
 TITLE_X = THUMB_X + 5
-TITLE_Y = THUMB_Y + THUMB_H + 25
+TITLE_Y = THUMB_Y + THUMB_H + 38
 
-META_Y = TITLE_Y + 58
+META_Y = TITLE_Y + 68
 
-BAR_X = THUMB_X + 5
-BAR_Y = META_Y + 60
+BAR_X = THUMB_X + 18
+BAR_Y = META_Y + 72
 
-BAR_RED_LEN = 330
-BAR_TOTAL_LEN = 920
+BAR_RED_LEN = 300
+BAR_TOTAL_LEN = 880
 
-ICONS_W, ICONS_H = 420, 45
+ICONS_W, ICONS_H = 470, 52
 ICONS_X = PANEL_X + (PANEL_W - ICONS_W) // 2
-ICONS_Y = BAR_Y + 65
+ICONS_Y = BAR_Y + 78
 
 MAX_TITLE_WIDTH = 850
 
@@ -171,7 +171,7 @@ class Thumbnail:
             panel = Image.new(
                 "RGBA",
                 (PANEL_W, PANEL_H),
-                (18, 18, 18, 210)
+                (12, 12, 12, 225)
             )
 
             border = Image.new(
@@ -184,9 +184,9 @@ class Thumbnail:
 
             bd.rounded_rectangle(
                 (0, 0, PANEL_W - 1, PANEL_H - 1),
-                radius=50,
-                outline=(255, 80, 80, 170),
-                width=4
+                radius=34,
+                outline=(255, 120, 120, 210),
+                width=2
             )
 
             mask = Image.new(
@@ -197,7 +197,7 @@ class Thumbnail:
 
             ImageDraw.Draw(mask).rounded_rectangle(
                 (0, 0, PANEL_W, PANEL_H),
-                radius=50,
+                radius=34,
                 fill=255
             )
 
@@ -212,9 +212,9 @@ class Thumbnail:
             draw = ImageDraw.Draw(bg)
 
             draw.text(
-    (45, 22),
+    (58, 24),
     "Kitty Music",
-    fill=(255, 255, 255, 230),
+    fill=(255, 80, 80, 180),
     font=self.signature_font
             )
 
@@ -228,7 +228,7 @@ class Thumbnail:
 
             ImageDraw.Draw(tmask).rounded_rectangle(
                 (0, 0, THUMB_W, THUMB_H),
-                radius=40,
+                radius=34,
                 fill=255
             )
 
@@ -253,12 +253,12 @@ class Thumbnail:
             draw.text(
                 (TITLE_X + 2, TITLE_Y + 2),
                 final_title,
-                fill=(0, 0, 0),
+                fill=(15, 15, 15),
                 font=self.title_font
             )
 
             draw.text(
-                (TITLE_X, TITLE_Y),
+                (TITLE_X + 8, TITLE_Y),
                 final_title,
                 fill=(255, 255, 255),
                 font=self.title_font
@@ -270,7 +270,7 @@ class Thumbnail:
             )
 
             draw.text(
-                (TITLE_X, META_Y),
+                (TITLE_X + 8, META_Y),
                 meta_text,
                 fill=(180, 180, 180),
                 font=self.regular_font
@@ -283,8 +283,8 @@ class Thumbnail:
                     BAR_X + BAR_TOTAL_LEN,
                     BAR_Y + 5
                 ),
-                radius=12,
-                fill=(60, 60, 60)
+                radius=7,
+                fill=(55, 55, 55)
             )
 
             draw.rounded_rectangle(
@@ -294,16 +294,16 @@ class Thumbnail:
                     BAR_X + BAR_RED_LEN,
                     BAR_Y + 5
                 ),
-                radius=12,
+                radius=7,
                 fill=(255, 35, 35)
             )
 
             draw.ellipse(
                 (
-                    BAR_X + BAR_RED_LEN - 12,
-                    BAR_Y - 12,
-                    BAR_X + BAR_RED_LEN + 12,
-                    BAR_Y + 12
+                    BAR_X + BAR_RED_LEN - 9,
+                    BAR_Y - 9,
+                    BAR_X + BAR_RED_LEN + 9,
+                    BAR_Y + 9
                 ),
                   fill=(255, 35, 35)
             )
@@ -311,7 +311,7 @@ class Thumbnail:
             draw.text(
                 (BAR_X, BAR_Y + 18),
                 "00:00",
-                fill="white",
+                fill=(235, 235, 235),
                 font=self.regular_font
             )
 
@@ -322,7 +322,7 @@ class Thumbnail:
             draw.text(
                 (BAR_X + BAR_TOTAL_LEN - 80, BAR_Y + 18),
                 end_text,
-                fill=(255, 35, 35) if is_live else "white",
+                fill=(0,255,255) if is_live else (235,235,235),
                 font=self.regular_font
             )
 
