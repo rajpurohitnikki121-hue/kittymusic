@@ -185,7 +185,7 @@ class Thumbnail:
             bd.rounded_rectangle(
                 (0, 0, PANEL_W - 1, PANEL_H - 1),
                 radius=42,
-                outline=(0, 255, 255, 220),
+                outline=(255, 45, 45, 235),
                 width=3
             )
 
@@ -295,7 +295,7 @@ class Thumbnail:
                     BAR_Y + 5
                 ),
                 radius=12,
-                fill=(0, 255, 255)
+                fill=(255, 35, 35)
             )
 
             draw.ellipse(
@@ -305,7 +305,7 @@ class Thumbnail:
                     BAR_X + BAR_RED_LEN + 12,
                     BAR_Y + 12
                 ),
-                fill=(0, 255, 255)
+                  fill=(255, 35, 35)
             )
 
             draw.text(
@@ -322,7 +322,7 @@ class Thumbnail:
             draw.text(
                 (BAR_X + BAR_TOTAL_LEN - 80, BAR_Y + 18),
                 end_text,
-                fill=(0, 255, 255) if is_live else "white",
+                fill=(255, 35, 35) if is_live else "white",
                 font=self.regular_font
             )
 
