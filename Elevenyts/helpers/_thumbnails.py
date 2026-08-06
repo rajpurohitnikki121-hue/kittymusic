@@ -31,30 +31,25 @@ from Elevenyts import config
 from Elevenyts.helpers import Track
 
 
-PANEL_W, PANEL_H = 1120, 650
-PANEL_X = 80
-PANEL_Y = 35
+# ---- Full-screen layout (no panel/frame) ----
+MARGIN_X = 60
 
-THUMB_W, THUMB_H = 1025, 355
-THUMB_X = PANEL_X + 48
-THUMB_Y = PANEL_Y + 42
-
-TITLE_X = THUMB_X + 5
-TITLE_Y = THUMB_Y + THUMB_H + 32
+TITLE_Y = 470
 
 META_Y = TITLE_Y + 60
 
-BAR_X = THUMB_X + 18
+BAR_X = MARGIN_X
 BAR_Y = META_Y + 58
-
-BAR_RED_LEN = 360
-BAR_TOTAL_LEN = 940
+BAR_TOTAL_LEN = 1280 - (2 * MARGIN_X)
+BAR_RED_LEN = int(BAR_TOTAL_LEN * 0.38)
 
 ICONS_W, ICONS_H = 520, 58
-ICONS_X = PANEL_X + (PANEL_W - ICONS_W) // 2
+ICONS_X = (1280 - ICONS_W) // 2
 ICONS_Y = BAR_Y + 48
 
-MAX_TITLE_WIDTH = 850
+MAX_TITLE_WIDTH = 1280 - (2 * MARGIN_X)
+
+GRADIENT_TOP = 360  # y where the bottom gradient starts fading in
 
 _f = "QXJ0aXN0Ym90cw=="
 
@@ -152,90 +147,67 @@ class Thumbnail:
         try:
 
             with Image.open(temp) as temp_img:
-                base = temp_img.resize(size).convert("RGBA")
+                src = temp_img.convert("RGBA")
 
-            bg = base.filter(ImageFilter.GaussianBlur(38))
+                # cover-fit crop so the image fills the full 1280x720
+                # frame with no borders/panel, cropping any excess
+                src_ratio = src.width / src.height
+                dst_ratio = size[0] / size[1]
 
-            bg = ImageEnhance.Brightness(bg).enhance(0.17)
+                if src_ratio > dst_ratio:
+                    new_h = size[1]
+                    new_w = int(new_h * src_ratio)
+                else:
+                    new_w = size[0]
+                    new_h = int(new_w / src_ratio)
 
-            bg = ImageEnhance.Contrast(bg).enhance(1.65)
+                resized = src.resize((new_w, new_h))
 
-            overlay = Image.new(
-                "RGBA",
-                size,
-                (0, 0, 0, 195)
-            )
+                left = (new_w - size[0]) // 2
+                top = (new_h - size[1]) // 2
 
-            bg = Image.alpha_composite(bg, overlay)
+                bg = resized.crop(
+                    (left, top, left + size[0], top + size[1])
+                )
 
-            panel = Image.new(
-                "RGBA",
-                (PANEL_W, PANEL_H),
-                (12, 12, 12, 225)
-            )
+            # subtle overall darken/contrast so white text stays readable
+            bg = ImageEnhance.Brightness(bg).enhance(0.92)
+            bg = ImageEnhance.Contrast(bg).enhance(1.08)
 
-            border = Image.new(
-                "RGBA",
-                (PANEL_W, PANEL_H),
-                (0, 0, 0, 0)
-            )
+            # bottom gradient so title/bar/icons stay legible over the photo
+            gradient = Image.new("RGBA", size, (0, 0, 0, 0))
+            grad_draw = ImageDraw.Draw(gradient)
 
-            bd = ImageDraw.Draw(border)
+            for y in range(GRADIENT_TOP, size[1]):
+                progress = (y - GRADIENT_TOP) / (size[1] - GRADIENT_TOP)
+                alpha = int(215 * progress)
+                grad_draw.line(
+                    [(0, y), (size[0], y)],
+                    fill=(0, 0, 0, alpha)
+                )
 
-            bd.rounded_rectangle(
-                (0, 0, PANEL_W - 1, PANEL_H - 1),
-                radius=34,
-                outline=(255, 95, 95, 165),
-                width=3
-            )
+            bg = Image.alpha_composite(bg, gradient)
 
-            mask = Image.new(
-                "L",
-                (PANEL_W, PANEL_H),
-                0
-            )
+            # top shadow strip so the signature text stays legible too
+            top_shadow = Image.new("RGBA", size, (0, 0, 0, 0))
+            ts_draw = ImageDraw.Draw(top_shadow)
 
-            ImageDraw.Draw(mask).rounded_rectangle(
-                (0, 0, PANEL_W, PANEL_H),
-                radius=34,
-                fill=255
-            )
+            for y in range(0, 110):
+                alpha = int(150 * (1 - y / 110))
+                ts_draw.line(
+                    [(0, y), (size[0], y)],
+                    fill=(0, 0, 0, alpha)
+                )
 
-            panel = Image.alpha_composite(panel, border)
-
-            bg.paste(
-                panel,
-                (PANEL_X, PANEL_Y),
-                mask
-            )
+            bg = Image.alpha_composite(bg, top_shadow)
 
             draw = ImageDraw.Draw(bg)
 
             draw.text(
-    (58, 24),
-    "Kitty Music",
-    fill=(255, 255, 255, 235),
-    font=self.signature_font
-            )
-
-            thumb = base.resize((THUMB_W, THUMB_H))
-
-            tmask = Image.new(
-                "L",
-                thumb.size,
-                0
-            )
-
-            ImageDraw.Draw(tmask).rounded_rectangle(
-                (0, 0, THUMB_W, THUMB_H),
-                radius=38,
-                fill=255
-            )
-
-            bg.paste(
-                thumb,
-                (THUMB_X, THUMB_Y),
-                tmask
+                (58, 24),
+                "Kitty Music",
+                fill=(255, 255, 255, 235),
+                font=self.signature_font
             )
 
             clean_title = re.sub(
@@ -251,28 +223,28 @@ class Thumbnail:
             )
 
             draw.text(
-                (TITLE_X + 2, TITLE_Y + 2),
+                (MARGIN_X + 2, TITLE_Y + 2),
                 final_title,
                 fill=(15, 15, 15),
                 font=self.title_font
             )
 
             draw.text(
-                (TITLE_X + 8, TITLE_Y),
+                (MARGIN_X + 8, TITLE_Y),
                 final_title,
                 fill=(255, 255, 255),
                 font=self.title_font
             )
 
             meta_text = (
-    f"Now Playing • Kitty Music • "
-    f"{song.view_count or 'Unknown Views'}"
+                f"Now Playing • Kitty Music • "
+                f"{song.view_count or 'Unknown Views'}"
             )
 
             draw.text(
-                (TITLE_X + 8, META_Y),
+                (MARGIN_X + 8, META_Y),
                 meta_text,
-                fill=(180, 180, 180),
+                fill=(210, 210, 210),
                 font=self.regular_font
             )
 
@@ -284,7 +256,7 @@ class Thumbnail:
                     BAR_Y + 5
                 ),
                 radius=7,
-                fill=(55, 55, 55)
+                fill=(70, 70, 70)
             )
 
             draw.rounded_rectangle(
@@ -305,7 +277,7 @@ class Thumbnail:
                     BAR_X + BAR_RED_LEN + 9,
                     BAR_Y + 9
                 ),
-                  fill=(255, 35, 35)
+                fill=(255, 35, 35)
             )
 
             draw.text(
@@ -322,7 +294,7 @@ class Thumbnail:
             draw.text(
                 (BAR_X + BAR_TOTAL_LEN - 80, BAR_Y + 18),
                 end_text,
-                fill=(0,255,255) if is_live else (235,235,235),
+                fill=(0, 255, 255) if is_live else (235, 235, 235),
                 font=self.regular_font
             )
 
