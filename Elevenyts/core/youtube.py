@@ -105,21 +105,27 @@ class YouTube:
         return None
 
     def get_cookies(self):
-        """Get random cookie file from cookies directory."""
-        if not self.checked:
+        """Get random cookie file from cookies directory.
+
+        Re-scans the cookies folder every time self.cookies is empty so
+        that newly added cookie files are picked up without a bot
+        restart (previously this only scanned once, ever).
+        """
+        if not self.checked or not self.cookies:
             cookies_dir = "Elevenyts/cookies"
+            self.cookies = []
             if os.path.exists(cookies_dir):
                 for file in os.listdir(cookies_dir):
                     if file.endswith(".txt"):
                         self.cookies.append(file)
             self.checked = True
-        
+
         if not self.cookies:
             if not self.warned:
                 self.warned = True
                 logger.warning("🍪 Cookies are missing; downloads might fail.")
             return None
-        
+
         cookie_file = f"Elevenyts/cookies/{random.choice(self.cookies)}"
         logger.debug(f"Using cookie file: {cookie_file}")
         return cookie_file
@@ -386,7 +392,13 @@ class YouTube:
                 "retries": 2,
                 "fragment_retries": 2,
                 "extractor_retries": 5,
-                "sleep_interval_requests": 1
+                "sleep_interval_requests": 1,
+                # Fix: without spoofing the player client, YouTube often
+                # serves cloud/datacenter IPs (Render, Heroku, etc.) a
+                # restricted format list that doesn't match
+                # "bestaudio/best", causing "Requested format is not
+                # available" even though cookies are valid.
+                "extractor_args": {"youtube": {"player_client": ["android", "web"]}},
             }
 
             if video:
