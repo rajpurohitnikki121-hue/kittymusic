@@ -47,8 +47,16 @@ class Inline:
             )
 
         if not remove:
-            # Seek buttons row
-            
+            # Seek buttons row (15-second forward/backward)
+            keyboard.append(
+                [
+                    self.ikb(
+                        text="𐙚 −15s", callback_data=f"controls seek_back_15 {chat_id}", style=ButtonStyle.PRIMARY),
+                    self.ikb(
+                        text="+15s 𐙚", callback_data=f"controls seek_forward_15 {chat_id}", style=ButtonStyle.PRIMARY),
+                ]
+            )
+
             # Main control buttons row
             keyboard.append(
                 [
@@ -205,4 +213,4 @@ class Inline:
                     self.ikb(text="ᴏᴘᴇɴ ɪɴ ʏᴏᴜᴛᴜʙᴇ", url=link, style=ButtonStyle.PRIMARY),
                 ],
             ]
-        )
+                            )
