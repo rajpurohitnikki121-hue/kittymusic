@@ -260,7 +260,13 @@ async def handle_seek(query: types.CallbackQuery, chat_id: int, action: str, use
         return await query.answer("⚠️ Cannot seek in this track!", show_alert=True)
     
     # Determine seek amount and direction
-    if action == "seek_back_10":
+    if action == "seek_back_15":
+        seconds = -15
+        label = "« 15s"
+    elif action == "seek_forward_15":
+        seconds = 15
+        label = "15s »"
+    elif action == "seek_back_10":
         seconds = -10
         label = "« 10s"
     elif action == "seek_back_30":
