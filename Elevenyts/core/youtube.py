@@ -398,7 +398,10 @@ class YouTube:
                 # restricted format list that doesn't match
                 # "bestaudio/best", causing "Requested format is not
                 # available" even though cookies are valid.
-                "extractor_args": {"youtube": {"player_client": ["android", "web"]}},
+                "extractor_args": {
+                    "youtube": {"player_client": ["ios", "android", "web", "tv"]},
+                    "youtubepot-bgutilscript": {"script_path": "/root/bgutil-ytdlp-pot-provider/server/build/generate_once.js"},
+                },
             }
 
             if video:
@@ -629,7 +632,10 @@ class YouTube:
                 "socket_timeout": 20,
                 "extractor_retries": 5,
                 "sleep_interval_requests": 1,
-                "extractor_args": {"youtube": {"player_client": ["android", "web"]}},
+                "extractor_args": {
+                    "youtube": {"player_client": ["ios", "android", "web", "tv"]},
+                    "youtubepot-bgutilscript": {"script_path": "/root/bgutil-ytdlp-pot-provider/server/build/generate_once.js"},
+                },
             }
 
             def _extract_url():
