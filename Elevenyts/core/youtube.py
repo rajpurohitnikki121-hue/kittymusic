@@ -378,7 +378,8 @@ class YouTube:
             cookie = self.get_cookies()
             base_opts = {
                 "outtmpl": "downloads/%(id)s.%(ext)s",
-                "quiet": True,
+                "quiet": False,
+                "verbose": True,
                 "noplaylist": True,
                 "geo_bypass": True,
                 "no_warnings": True,
@@ -400,7 +401,7 @@ class YouTube:
                 # available" even though cookies are valid.
                 "extractor_args": {
                     "youtube": {"player_client": ["ios", "android", "web", "tv"]},
-                    "youtubepot-bgutilscript": {"script_path": "/root/bgutil-ytdlp-pot-provider/server/build/generate_once.js"},
+                    "youtubepot-bgutilscript": {"server_home": "/root/bgutil-ytdlp-pot-provider/server"},
                 },
             }
 
@@ -427,7 +428,7 @@ class YouTube:
             else:
                 ydl_opts = {
                     **base_opts,
-                    "format": "bestaudio/best",
+                    "format": "bestaudio[ext=m4a]/bestaudio[acodec=opus]/bestaudio/best",
                     "postprocessors": [],
                 }
 
@@ -634,7 +635,7 @@ class YouTube:
                 "sleep_interval_requests": 1,
                 "extractor_args": {
                     "youtube": {"player_client": ["ios", "android", "web", "tv"]},
-                    "youtubepot-bgutilscript": {"script_path": "/root/bgutil-ytdlp-pot-provider/server/build/generate_once.js"},
+                    "youtubepot-bgutilscript": {"server_home": "/root/bgutil-ytdlp-pot-provider/server"},
                 },
             }
 
