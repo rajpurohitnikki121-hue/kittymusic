@@ -400,7 +400,10 @@ class YouTube:
                 # "bestaudio/best", causing "Requested format is not
                 # available" even though cookies are valid.
                 "extractor_args": {
-                    "youtube": {"player_client": ["ios", "android", "web", "tv"]},
+                    "youtube": {
+                        "player_client": ["ios", "tv_embedded"],
+                        "player_skip": ["webpage", "js"],
+                    },
                     "youtubepot-bgutilscript": {"server_home": "/root/bgutil-ytdlp-pot-provider/server"},
                 },
             }
@@ -428,7 +431,7 @@ class YouTube:
             else:
                 ydl_opts = {
                     **base_opts,
-                    "format": "bestaudio[ext=m4a]/bestaudio[acodec=opus]/bestaudio/best",
+                    "format": "bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best",
                     "postprocessors": [],
                 }
 
@@ -634,7 +637,10 @@ class YouTube:
                 "extractor_retries": 5,
                 "sleep_interval_requests": 1,
                 "extractor_args": {
-                    "youtube": {"player_client": ["ios", "android", "web", "tv"]},
+                    "youtube": {
+                        "player_client": ["ios", "tv_embedded"],
+                        "player_skip": ["webpage", "js"],
+                    },
                     "youtubepot-bgutilscript": {"server_home": "/root/bgutil-ytdlp-pot-provider/server"},
                 },
             }
