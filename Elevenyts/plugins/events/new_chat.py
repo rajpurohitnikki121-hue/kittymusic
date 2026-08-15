@@ -15,8 +15,26 @@
 # ==========================================================
 from pyrogram import filters, types
 from pyrogram.errors import ChatAdminRequired, ChannelPrivate
+from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 from Elevenyts import app, config
+
+GROUP_IMG = "https://files.catbox.moe/4qgc5d.jpg"
+
+
+def _group_welcome_markup():
+    return InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton(
+                text="♡ + 𝐀𝐝𝐝 𝐌𝐞",
+                url=f"https://t.me/{app.username}?startgroup=true"
+            ),
+            InlineKeyboardButton(
+                text="✦ 𝐇𝐞𝐥𝐩",
+                callback_data="help"
+            ),
+        ]
+    ])
 
 
 # ==========================================
@@ -28,7 +46,6 @@ async def new_chat_member(_, message: types.Message):
     for member in message.new_chat_members:
         if member.id == app.id:
             chat = message.chat
-
             chat_name = chat.title
             chat_id = chat.id
             chat_username = f"@{chat.username}" if chat.username else "ᴘʀɪᴠᴀᴛᴇ ɢʀᴏᴜᴘ"
@@ -56,7 +73,8 @@ async def new_chat_member(_, message: types.Message):
             except Exception:
                 chat_link = "❌ ᴜɴᴀʙʟᴇ ᴛᴏ ɢᴇᴛ ʟɪɴᴋ"
 
-            text = f"""<blockquote>🟢 <b>˹˹𝐄𝐥𝐞𝐯𝐞𝐧𝐲𝐭𝐬 ꭙ ᴍᴜꜱɪᴄ˼ ᴀᴅᴅᴇᴅ ɪɴ ᴀ ɴᴇᴡ ɢʀᴏᴜᴘ</b></blockquote>
+            # Logger notification (internal — keeps existing format)
+            logger_text = f"""<blockquote>🟢 <b>𝐈𝐒𝐇𝐐 ✘ 𝐌𝐮𝐬𝐢𝐜 ᴀᴅᴅᴇᴅ ɪɴ ᴀ ɴᴇᴡ ɢʀᴏᴜᴘ</b></blockquote>
 
 <blockquote>
 🔖 <b>ᴄʜᴀᴛ ɴᴀᴍᴇ:</b> {chat_name}
@@ -68,14 +86,41 @@ async def new_chat_member(_, message: types.Message):
 </blockquote>
 """
 
+            # Group welcome message (public — Ishq branding)
+            group_text = (
+                f"♡ 𝐓𝐡𝐚𝐧𝐤 𝐘𝐨𝐮 𝐅𝐨𝐫 𝐀𝐝𝐝𝐢𝐧𝐠 𝐌𝐞 ♡\n\n"
+                f"🎵 𐙚 𝐈𝐒𝐇𝐐 ✘ 𝐌𝐮𝐬𝐢𝐜 ᥫ᭡\n\n"
+                f"🥀 𝐑𝐞𝐚𝐝𝐲 𝐓𝐨 𝐏𝐥𝐚𝐲 𝐘𝐨𝐮𝐫 𝐅𝐚𝐯𝐨𝐮𝐫𝐢𝐭𝐞 𝐌𝐮𝐬𝐢𝐜.\n\n"
+                f"𝐓𝐡𝐚𝐧𝐤 𝐲𝐨𝐮 𝐟𝐨𝐫 𝐚𝐝𝐝𝐢𝐧𝐠 𝐦𝐞 𝐭𝐨 {chat_name} ♡"
+            )
+
+            # Send logger notification
             try:
                 await app.send_photo(
                     chat_id=config.LOGGER_ID,
                     photo=config.START_IMG,
-                    caption=text
+                    caption=logger_text
                 )
             except Exception as e:
                 print(f"Failed to send new chat notification: {e}")
+
+            # Send group welcome message with buttons
+            try:
+                await app.send_photo(
+                    chat_id=chat_id,
+                    photo=GROUP_IMG,
+                    caption=group_text,
+                    reply_markup=_group_welcome_markup()
+                )
+            except Exception:
+                try:
+                    await app.send_message(
+                        chat_id=chat_id,
+                        text=group_text,
+                        reply_markup=_group_welcome_markup()
+                    )
+                except Exception as e:
+                    print(f"Failed to send group welcome: {e}")
 
             break
 
@@ -88,15 +133,12 @@ async def left_chat_member(_, message: types.Message):
 
     if message.left_chat_member.id == app.id:
         chat = message.chat
-
         chat_name = chat.title
         chat_id = chat.id
         chat_username = f"@{chat.username}" if chat.username else "ᴘʀɪᴠᴀᴛᴇ ɢʀᴏᴜᴘ"
-
         removed_by = message.from_user
         removed_by_name = removed_by.mention if removed_by else "ᴜɴᴋɴᴏᴡɴ"
 
-        # 🔗 LINK
         try:
             if chat.username:
                 chat_link = f"https://t.me/{chat.username}"
@@ -106,10 +148,10 @@ async def left_chat_member(_, message: types.Message):
                     chat_link = await app.export_chat_invite_link(chat_id)
                 else:
                     chat_link = "❌ ɴᴏ ɪɴᴠɪᴛᴇ ᴘᴇʀᴍɪssɪᴏɴ"
-        except:
+        except Exception:
             chat_link = "❌ ᴜɴᴀʙʟᴇ ᴛᴏ ɢᴇᴛ ʟɪɴᴋ"
 
-        text = f"""<blockquote>🔴 <b>˹𝐄𝐥𝐞𝐯𝐞𝐧𝐲𝐭𝐬 ꭙ ᴍᴜꜱɪᴄ˼ ʀᴇᴍᴏᴠᴇᴅ ꜰʀᴏᴍ ᴀ ɢʀᴏᴜᴘ</b></blockquote>
+        text = f"""<blockquote>🔴 <b>𝐈𝐒𝐇𝐐 ✘ 𝐌𝐮𝐬𝐢𝐜 ʀᴇᴍᴏᴠᴇᴅ ꜰʀᴏᴍ ᴀ ɢʀᴏᴜᴘ</b></blockquote>
 
 <blockquote>
 🔖 <b>ᴄʜᴀᴛ ɴᴀᴍᴇ:</b> {chat_name}
@@ -119,7 +161,6 @@ async def left_chat_member(_, message: types.Message):
 🚫 <b>ʀᴇᴍᴏᴠᴇᴅ ʙʏ:</b> {removed_by_name}
 </blockquote>
 """
-
         try:
             await app.send_photo(
                 chat_id=config.LOGGER_ID,
@@ -136,7 +177,6 @@ async def left_chat_member(_, message: types.Message):
 @app.on_message(filters.command("link") & filters.private)
 async def get_group_link(_, message: types.Message):
 
-    # OWNER CHECK
     if message.from_user.id != config.OWNER_ID:
         return await message.reply_text("❌ You are not authorized.")
 
@@ -145,17 +185,15 @@ async def get_group_link(_, message: types.Message):
 
     try:
         chat_id = int(message.command[1])
-    except:
+    except Exception:
         return await message.reply_text("❌ Invalid group ID")
 
     try:
         chat = await app.get_chat(chat_id)
-
         if chat.username:
             link = f"https://t.me/{chat.username}"
         else:
             bot_member = await app.get_chat_member(chat_id, app.id)
-
             if bot_member.privileges and bot_member.privileges.can_invite_users:
                 link = await app.export_chat_invite_link(chat_id)
             else:
@@ -165,12 +203,9 @@ async def get_group_link(_, message: types.Message):
             f"🔗 <b>Group Link:</b>\n{link}",
             disable_web_page_preview=True
         )
-
     except ChannelPrivate:
         await message.reply_text("❌ Bot is not in that group")
-
     except ChatAdminRequired:
         await message.reply_text("❌ Bot is not admin")
-
     except Exception as e:
         await message.reply_text(f"❌ Error:\n{e}")
