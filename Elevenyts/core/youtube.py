@@ -401,8 +401,7 @@ class YouTube:
                 # available" even though cookies are valid.
                 "extractor_args": {
                     "youtube": {
-                        "player_client": ["ios", "tv_embedded"],
-                        "player_skip": ["webpage", "js"],
+                        "player_client": ["mweb", "web"],
                     },
                     "youtubepot-bgutilscript": {"server_home": "/root/bgutil-ytdlp-pot-provider/server"},
                 },
@@ -638,8 +637,7 @@ class YouTube:
                 "sleep_interval_requests": 1,
                 "extractor_args": {
                     "youtube": {
-                        "player_client": ["ios", "tv_embedded"],
-                        "player_skip": ["webpage", "js"],
+                        "player_client": ["mweb", "web"],
                     },
                     "youtubepot-bgutilscript": {"server_home": "/root/bgutil-ytdlp-pot-provider/server"},
                 },
