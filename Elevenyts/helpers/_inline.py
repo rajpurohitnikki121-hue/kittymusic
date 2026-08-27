@@ -179,19 +179,27 @@ class Inline:
         rows = [
             [
                 self.ikb(
-                    text="𐙚 ᴍᴀʟᴋɪɴ",
-                    url="https://t.me/kaal_ki_laddo",
+                    text="Owner ♛",
+                    url="https://t.me/pixieiii",
                     style=ButtonStyle.SUCCESS,
                 ),
                 self.ikb(
-                    text="ʜᴇʟᴘ",
+                    text="Help ?",
                     callback_data="help",
                     style=ButtonStyle.SUCCESS,
                 ),
             ],
             [
-                self.ikb(text=lang["support"], url=config.SUPPORT_CHAT, style=ButtonStyle.PRIMARY),
-                self.ikb(text=lang["channel"], url=config.SUPPORT_CHANNEL, style=ButtonStyle.PRIMARY),
+                self.ikb(
+                    text="Support ↝",
+                    url="https://t.me/nighttblooms",
+                    style=ButtonStyle.PRIMARY,
+                ),
+                self.ikb(
+                    text="Add Me ✚",
+                    url=f"https://t.me/{app.username}?startgroup=true",
+                    style=ButtonStyle.PRIMARY,
+                ),
             ],
         ]
         return self.ikm(rows)
@@ -204,4 +212,4 @@ class Inline:
                     self.ikb(text="ᴏᴘᴇɴ ɪɴ ʏᴏᴜᴛᴜʙᴇ", url=link, style=ButtonStyle.PRIMARY),
                 ],
             ]
-        )
+                    )
