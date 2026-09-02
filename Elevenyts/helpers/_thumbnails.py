@@ -30,7 +30,7 @@ from Elevenyts.helpers import Track
 
 SIZE = (1280, 720)
 
-BRAND_TEXT = "Kitty X Music !!"
+BRAND_TEXT = "𝐏𝐢𝐱𝐞𝐥𝐚"
 BRAND_X = 45
 BRAND_Y = 35
 
