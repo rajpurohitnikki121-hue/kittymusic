@@ -13,6 +13,7 @@
 # Unauthorized copying, modification, or redistribution
 # of this source code without permission is prohibited.
 # ==========================================================
+
 from os import getenv
 from typing import List
 from dotenv import load_dotenv
@@ -56,9 +57,13 @@ class Config:
         self.VIDEO_PLAY: bool = self._str_to_bool(getenv("VIDEO_PLAY", "True"))
         self.VIDEO_MAX_HEIGHT: int = self._parse_video_height()
 
-        # ArtistBots API
-        self.ARTISTBOTS_API_URL: str = getenv("ARTISTBOTS_API_URL", "")
-        self.ARTISTBOTS_KEY: str = getenv("ARTISTBOTS_KEY", "")
+        # Music API — generic, single-provider configuration.
+        # Whichever API_URL/API_KEY you set is the ONE active provider.
+        # There is no automatic fallback between providers and nothing
+        # is hardcoded to a specific one (Sparrow, OneGrab/Fallen, etc.
+        # all work through these same two variables).
+        self.API_URL: str = getenv("API_URL", "").rstrip("/")
+        self.API_KEY: str = getenv("API_KEY", "")
         self.ENABLE_API: bool = self._str_to_bool(getenv("ENABLE_API", "True"))
         self.ENABLE_COOKIES_FALLBACK: bool = self._str_to_bool(getenv("ENABLE_COOKIES_FALLBACK", "True"))
         self.API_TIMEOUT: int = int(getenv("API_TIMEOUT", "60"))
@@ -119,12 +124,15 @@ class Config:
             "OWNER_ID": self.OWNER_ID,
             "STRING_SESSION": self.SESSION1,
         }
+
         missing = [name for name, value in required_vars.items() if not value or (isinstance(value, int) and value == 0)]
         if missing:
             raise SystemExit(f"Missing required env vars: {', '.join(missing)}")
-        
-        if self.ENABLE_API and not self.ARTISTBOTS_KEY:
-            print("Warning: ENABLE_API is True but ARTISTBOTS_KEY is not set")
+
+        if self.ENABLE_API and not self.API_URL:
+            print("Warning: ENABLE_API is True but API_URL is not set")
+        if self.ENABLE_API and not self.API_KEY:
+            print("Warning: ENABLE_API is True but API_KEY is not set")
 
 
 config = Config()
