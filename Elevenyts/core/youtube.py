@@ -188,20 +188,14 @@ class YouTube:
 
     def _build_api_request(self, video_id: str, download_type: str):
         """
-        Build the (endpoint, params, headers) for the ONE configured
-        provider (self.api_url). No other provider is ever contacted —
-        the host string is only inspected to pick the right request
-        *shape* (param names / auth style) for whichever API_URL you
-        set; it never triggers a second API call or a fallback.
+        Build the (endpoint, params, headers) for providers that expose
+        a direct binary /download-style endpoint (used for Sparrow and
+        as a generic fallback for any other API_URL). OneGrab/Fallen is
+        handled separately in _download_via_onegrab because it returns
+        a JSON metadata object with a cdnurl field, not a binary payload
+        on a /download route.
         """
         host = self.api_url.lower()
-
-        if "onegrab" in host or "fallenapi" in host:
-            # OneGrab / Fallen-family APIs — Bearer token auth on /v1 routes.
-            endpoint = f"{self.api_url}/v1/download"
-            params = {"url": video_id, "type": download_type}
-            headers = {"Authorization": f"Bearer {self.api_key}"}
-            return endpoint, params, headers
 
         if "sparrow" in host:
             # Sparrow publishes GET /download but not its exact param
@@ -231,14 +225,14 @@ class YouTube:
         """Look for a stream/download URL in a few common JSON shapes."""
         if not isinstance(payload, dict):
             return None
-        for key in ("url", "download_url", "downloadUrl", "link", "stream_url", "streamUrl"):
+        for key in ("url", "download_url", "downloadUrl", "link", "stream_url", "streamUrl", "cdnurl"):
             value = payload.get(key)
             if isinstance(value, str) and value.startswith("http"):
                 return value
         for wrapper in ("result", "data"):
             nested = payload.get(wrapper)
             if isinstance(nested, dict):
-                for key in ("url", "download_url", "downloadUrl", "link", "stream_url", "streamUrl"):
+                for key in ("url", "download_url", "downloadUrl", "link", "stream_url", "streamUrl", "cdnurl"):
                     value = nested.get(key)
                     if isinstance(value, str) and value.startswith("http"):
                         return value
@@ -299,6 +293,98 @@ class YouTube:
             logger.error(f"❌ Failed to download stream link for {video_id}: {e}")
             return None
 
+    async def _download_via_onegrab(self, link: str, video: bool, file_path: str, video_id: str) -> Optional[str]:
+        """
+        OneGrab/Fallen-family flow:
+        GET /api/track?url=<youtube_url>&video=true|false
+        -> JSON with a "cdnurl" field holding the actual file link
+        -> download that link to disk.
+        """
+        endpoint = f"{self.api_url}/api/track"
+        params = {"url": link, "video": str(video).lower()}
+        headers = {"Authorization": f"Bearer {self.api_key}"} if self.api_key else {}
+
+        logger.info(f"Calling API: {endpoint}")
+
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    endpoint,
+                    params=params,
+                    headers=headers,
+                    timeout=aiohttp.ClientTimeout(total=self.api_timeout),
+                ) as response:
+                    logger.info(f"API response status: {response.status}")
+
+                    if response.status != 200:
+                        try:
+                            error_text = await response.text()
+                            logger.error(f"API returned status {response.status}: {error_text[:200]}")
+                        except Exception:
+                            logger.error(f"API returned status {response.status}")
+                        return None
+
+                    try:
+                        payload = await response.json(content_type=None)
+                    except Exception as e:
+                        logger.error(f"Failed to parse JSON response from API: {e}")
+                        return None
+        except asyncio.TimeoutError:
+            logger.error(f"⏰ API timeout for {video_id} after {self.api_timeout} seconds")
+            return None
+        except aiohttp.ClientError as e:
+            logger.error(f"🌐 API client error for {video_id}: {e}")
+            return None
+
+        cdn_url = payload.get("cdnurl") if isinstance(payload, dict) else None
+        if not cdn_url:
+            logger.error(f"API response had no cdnurl: {payload}")
+            return None
+
+        download_type = "video" if video else "audio"
+        return await self._download_binary(cdn_url, file_path, {}, download_type, video_id)
+
+    async def _download_via_generic(self, video_id: str, download_type: str, file_path: str) -> Optional[str]:
+        """Binary /download-style flow used for Sparrow and any other
+        unrecognized API_URL (see _build_api_request)."""
+        endpoint, params, headers = self._build_api_request(video_id, download_type)
+        logger.info(f"Calling API: {endpoint}")
+
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                endpoint,
+                params=params,
+                headers=headers,
+                timeout=aiohttp.ClientTimeout(total=self.api_stream_timeout),
+            ) as response:
+                logger.info(f"API response status: {response.status}")
+
+                if response.status != 200:
+                    try:
+                        error_text = await response.text()
+                        logger.error(f"API returned status {response.status}: {error_text[:200]}")
+                    except Exception:
+                        logger.error(f"API returned status {response.status}")
+                    return None
+
+                content_type = (response.headers.get("content-type") or "").lower()
+
+                if "application/json" in content_type:
+                    try:
+                        payload = await response.json(content_type=None)
+                    except Exception as e:
+                        logger.error(f"Failed to parse JSON response from API: {e}")
+                        return None
+
+                    stream_link = self._extract_stream_link(payload)
+                    if not stream_link:
+                        logger.error(f"API JSON response had no recognizable stream/download link: {payload}")
+                        return None
+
+                    return await self._download_binary(stream_link, file_path, headers, download_type, video_id)
+
+                return await self._save_binary_response(response, file_path, download_type, video_id)
+
     async def download_via_api(self, link: str, video: bool = False) -> Optional[str]:
         """
         Download audio/video using the configured music API (Primary Method).
@@ -351,49 +437,14 @@ class YouTube:
 
         try:
             download_type = "video" if video else "audio"
+            host = self.api_url.lower()
+
+            if "onegrab" in host or "fallenapi" in host:
+                logger.info(f"🚀 [API PRIMARY] Requesting {video_id} from OneGrab/Fallen API (type: {download_type})")
+                return await self._download_via_onegrab(link, video, file_path, video_id)
+
             logger.info(f"🚀 [API PRIMARY] Requesting {video_id} from configured API (type: {download_type})")
-
-            endpoint, params, headers = self._build_api_request(video_id, download_type)
-            logger.info(f"Calling API: {endpoint}")
-
-            async with aiohttp.ClientSession() as session:
-                async with session.get(
-                    endpoint,
-                    params=params,
-                    headers=headers,
-                    timeout=aiohttp.ClientTimeout(total=self.api_stream_timeout),
-                ) as response:
-                    logger.info(f"API response status: {response.status}")
-
-                    if response.status != 200:
-                        try:
-                            error_text = await response.text()
-                            logger.error(f"API returned status {response.status}: {error_text[:200]}")
-                        except Exception:
-                            logger.error(f"API returned status {response.status}")
-                        return None
-
-                    content_type = (response.headers.get("content-type") or "").lower()
-
-                    # Some providers return a JSON envelope containing a
-                    # stream/download link instead of streaming the file
-                    # directly. Handle both shapes transparently.
-                    if "application/json" in content_type:
-                        try:
-                            payload = await response.json(content_type=None)
-                        except Exception as e:
-                            logger.error(f"Failed to parse JSON response from API: {e}")
-                            return None
-
-                        stream_link = self._extract_stream_link(payload)
-                        if not stream_link:
-                            logger.error(f"API JSON response had no recognizable stream/download link: {payload}")
-                            return None
-
-                        return await self._download_binary(stream_link, file_path, headers, download_type, video_id)
-
-                    # Otherwise treat the response as the raw binary payload.
-                    return await self._save_binary_response(response, file_path, download_type, video_id)
+            return await self._download_via_generic(video_id, download_type, file_path)
 
         except asyncio.TimeoutError:
             logger.error(f"⏰ API timeout for {video_id} after {self.api_stream_timeout} seconds")
@@ -825,4 +876,4 @@ class YouTube:
             f"failed for {video_id}"
         )
 
-        return None
+        return None      
