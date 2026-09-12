@@ -1682,24 +1682,23 @@ class YouTube:
         # COOKIES FALLBACK
         # ======================================================
 
-        if self.enable_cookies_fallback:
+                if self.enable_cookies_fallback:
 
-    logger.info(
-        f"🍪 [PRIORITY 2] Trying cookies "
-        f"download for {video_id}"
-    )
+            logger.info(
+                f"🍪 [PRIORITY 2] Trying cookies "
+                f"download for {video_id}"
+            )
 
-    result = await self.download_via_cookies(
-        video_id,
-        video=video
-    )
+            result = await self.download_via_cookies(
+                video_id,
+                video=video
+            )
 
             if result:
-
                 logger.info(
                     f"✅ [SUCCESS] Downloaded "
                     f"via cookies: {video_id}"
-                ) 
+                )
 
                 return result
 
