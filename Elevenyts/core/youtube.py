@@ -48,6 +48,12 @@ class YouTube:
         self.api_timeout = config.API_TIMEOUT
         self.api_stream_timeout = config.API_STREAM_TIMEOUT
 
+        # How many times to retry the SAME configured provider before
+        # giving up on the API and moving to cookies fallback. This is
+        # a retry, not a second provider — API_URL never changes here.
+        self.api_max_attempts = 2
+        self.api_retry_delay = 2  # seconds between retries
+
         # Regular expression to match YouTube URLs
         self.regex = re.compile(
             r"(https?://)?(www\.|m\.|music\.)?"
@@ -391,6 +397,9 @@ class YouTube:
 
         Provider is chosen ENTIRELY by API_URL / API_KEY — one active
         provider at a time, no automatic fallback to another provider.
+        If the provider fails transiently, the SAME provider is retried
+        a couple of times (self.api_max_attempts) before giving up —
+        this is a retry, not a second API.
 
         Args:
             link: YouTube URL or video ID
@@ -435,26 +444,39 @@ class YouTube:
             logger.debug(f"File already exists: {file_path}")
             return file_path
 
-        try:
-            download_type = "video" if video else "audio"
-            host = self.api_url.lower()
+        download_type = "video" if video else "audio"
+        host = self.api_url.lower()
+        is_onegrab = "onegrab" in host or "fallenapi" in host
 
-            if "onegrab" in host or "fallenapi" in host:
-                logger.info(f"🚀 [API PRIMARY] Requesting {video_id} from OneGrab/Fallen API (type: {download_type})")
-                return await self._download_via_onegrab(link, video, file_path, video_id)
+        for attempt in range(1, self.api_max_attempts + 1):
+            try:
+                if attempt > 1:
+                    logger.info(
+                        f"🔁 [API RETRY {attempt}/{self.api_max_attempts}] "
+                        f"Retrying same provider for {video_id}"
+                    )
+                else:
+                    logger.info(f"🚀 [API PRIMARY] Requesting {video_id} from configured API (type: {download_type})")
 
-            logger.info(f"🚀 [API PRIMARY] Requesting {video_id} from configured API (type: {download_type})")
-            return await self._download_via_generic(video_id, download_type, file_path)
+                if is_onegrab:
+                    result = await self._download_via_onegrab(link, video, file_path, video_id)
+                else:
+                    result = await self._download_via_generic(video_id, download_type, file_path)
 
-        except asyncio.TimeoutError:
-            logger.error(f"⏰ API timeout for {video_id} after {self.api_stream_timeout} seconds")
-            return None
-        except aiohttp.ClientError as e:
-            logger.error(f"🌐 API client error for {video_id}: {e}")
-            return None
-        except Exception as e:
-            logger.error(f"❌ API download failed for {video_id}: {type(e).__name__}: {e}")
-            return None
+                if result:
+                    return result
+
+            except asyncio.TimeoutError:
+                logger.error(f"⏰ API timeout for {video_id} after {self.api_stream_timeout} seconds")
+            except aiohttp.ClientError as e:
+                logger.error(f"🌐 API client error for {video_id}: {e}")
+            except Exception as e:
+                logger.error(f"❌ API download failed for {video_id}: {type(e).__name__}: {e}")
+
+            if attempt < self.api_max_attempts:
+                await asyncio.sleep(self.api_retry_delay)
+
+        return None
 
     async def download_via_cookies(self, video_id: str, video: bool = False) -> Optional[str]:
         """
@@ -539,10 +561,12 @@ class YouTube:
                 # serves cloud/datacenter IPs (Render, Heroku, etc.) a
                 # restricted format list that doesn't match
                 # "bestaudio/best", causing "Requested format is not
-                # available" even though cookies are valid.
+                # available" even though cookies are valid. Trying
+                # extra clients (tv, android) beyond mweb/web sometimes
+                # bypasses the SABR-only restriction.
                 "extractor_args": {
                     "youtube": {
-                        "player_client": ["mweb", "web"],
+                        "player_client": ["mweb", "web", "tv", "android"],
                     },
                     "youtubepot-bgutilscript": {"server_home": "/root/bgutil-ytdlp-pot-provider/server"},
                 },
@@ -779,7 +803,7 @@ class YouTube:
                 "sleep_interval_requests": 1,
                 "extractor_args": {
                     "youtube": {
-                        "player_client": ["mweb", "web"],
+                        "player_client": ["mweb", "web", "tv", "android"],
                     },
                     "youtubepot-bgutilscript": {"server_home": "/root/bgutil-ytdlp-pot-provider/server"},
                 },
@@ -876,4 +900,4 @@ class YouTube:
             f"failed for {video_id}"
         )
 
-        return None      
+        return None
