@@ -196,10 +196,10 @@ class YouTube:
         """
         Build the (endpoint, params, headers) for providers that expose
         a direct binary /download-style endpoint (used for Sparrow and
-        as a generic fallback for any other API_URL). OneGrab/Fallen is
-        handled separately in _download_via_onegrab because it returns
-        a JSON metadata object with a cdnurl field, not a binary payload
-        on a /download route.
+        as a generic fallback for any other API_URL). OneGrab/Fallen and
+        Yuki API are handled separately (see _download_via_onegrab and
+        _download_via_yukiapi) because they return JSON metadata first,
+        not a binary payload on a single /download route.
         """
         host = self.api_url.lower()
 
@@ -350,6 +350,89 @@ class YouTube:
         download_type = "video" if video else "audio"
         return await self._download_binary(cdn_url, file_path, {}, download_type, video_id)
 
+    async def _download_via_yukiapi(self, link: str, video: bool, file_path: str, video_id: str) -> Optional[str]:
+        """
+        Yuki API flow (music.yukiapi.site), per its published API_DOCS.md:
+        1. GET /download?url=<link>&type=audio|video
+           -> JSON {"status":"success","video_id":"...","download_token":"..."}
+        2. GET /stream/{video_id}?token=<download_token>&type=audio|video
+           -> binary media stream, saved to disk.
+
+        No API key is required by this provider's documented contract —
+        only that API_KEY be set to any non-empty value so the bot's
+        generic "no key configured" guard doesn't block the request.
+        """
+        download_type = "video" if video else "audio"
+        resolve_endpoint = f"{self.api_url}/download"
+        resolve_params = {"url": link, "type": download_type}
+
+        logger.info(f"Calling API: {resolve_endpoint}")
+
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    resolve_endpoint,
+                    params=resolve_params,
+                    timeout=aiohttp.ClientTimeout(total=self.api_timeout),
+                ) as response:
+                    logger.info(f"API response status: {response.status}")
+
+                    if response.status != 200:
+                        try:
+                            error_text = await response.text()
+                            logger.error(f"API returned status {response.status}: {error_text[:200]}")
+                        except Exception:
+                            logger.error(f"API returned status {response.status}")
+                        return None
+
+                    try:
+                        payload = await response.json(content_type=None)
+                    except Exception as e:
+                        logger.error(f"Failed to parse JSON response from API: {e}")
+                        return None
+        except asyncio.TimeoutError:
+            logger.error(f"⏰ API timeout for {video_id} after {self.api_timeout} seconds")
+            return None
+        except aiohttp.ClientError as e:
+            logger.error(f"🌐 API client error for {video_id}: {e}")
+            return None
+
+        resolved_video_id = payload.get("video_id") if isinstance(payload, dict) else None
+        download_token = payload.get("download_token") if isinstance(payload, dict) else None
+        if not resolved_video_id or not download_token:
+            logger.error(f"API /download response missing video_id/download_token: {payload}")
+            return None
+
+        stream_endpoint = f"{self.api_url}/stream/{resolved_video_id}"
+        stream_params = {"token": download_token, "type": download_type}
+
+        logger.info(f"Calling API: {stream_endpoint}")
+
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    stream_endpoint,
+                    params=stream_params,
+                    timeout=aiohttp.ClientTimeout(total=self.api_stream_timeout),
+                ) as response:
+                    logger.info(f"API stream response status: {response.status}")
+
+                    if response.status != 200:
+                        try:
+                            error_text = await response.text()
+                            logger.error(f"API stream returned status {response.status}: {error_text[:200]}")
+                        except Exception:
+                            logger.error(f"API stream returned status {response.status}")
+                        return None
+
+                    return await self._save_binary_response(response, file_path, download_type, video_id)
+        except asyncio.TimeoutError:
+            logger.error(f"⏰ API stream timeout for {video_id} after {self.api_stream_timeout} seconds")
+            return None
+        except aiohttp.ClientError as e:
+            logger.error(f"🌐 API stream client error for {video_id}: {e}")
+            return None
+
     async def _download_via_generic(self, video_id: str, download_type: str, file_path: str) -> Optional[str]:
         """Binary /download-style flow used for Sparrow and any other
         unrecognized API_URL (see _build_api_request)."""
@@ -416,7 +499,13 @@ class YouTube:
             logger.info("API_URL not configured, skipping API download")
             return None
 
-        if not self.api_key:
+        host = self.api_url.lower()
+        is_onegrab = "onegrab" in host or "fallenapi" in host
+        is_yukiapi = "yukiapi" in host
+
+        # Yuki API's documented contract needs no key — only enforce the
+        # "key configured" guard for providers that actually require one.
+        if not self.api_key and not is_yukiapi:
             logger.warning("No API key configured! Skipping API download")
             return None
 
@@ -445,8 +534,6 @@ class YouTube:
             return file_path
 
         download_type = "video" if video else "audio"
-        host = self.api_url.lower()
-        is_onegrab = "onegrab" in host or "fallenapi" in host
 
         for attempt in range(1, self.api_max_attempts + 1):
             try:
@@ -460,6 +547,8 @@ class YouTube:
 
                 if is_onegrab:
                     result = await self._download_via_onegrab(link, video, file_path, video_id)
+                elif is_yukiapi:
+                    result = await self._download_via_yukiapi(link, video, file_path, video_id)
                 else:
                     result = await self._download_via_generic(video_id, download_type, file_path)
 
