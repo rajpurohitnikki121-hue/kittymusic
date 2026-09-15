@@ -358,13 +358,18 @@ class YouTube:
         2. GET /stream/{video_id}?token=<download_token>&type=audio|video
            -> binary media stream, saved to disk.
 
-        No API key is required by this provider's documented contract —
-        only that API_KEY be set to any non-empty value so the bot's
-        generic "no key configured" guard doesn't block the request.
+        The live server requires an API key even though the published
+        docs don't state the exact header/param name, so the key is
+        sent under a few common conventions at once — extra headers or
+        params a server doesn't recognize are normally just ignored.
         """
         download_type = "video" if video else "audio"
         resolve_endpoint = f"{self.api_url}/download"
-        resolve_params = {"url": link, "type": download_type}
+        resolve_params = {"url": link, "type": download_type, "api_key": self.api_key, "key": self.api_key}
+        resolve_headers = {
+            "X-API-Key": self.api_key,
+            "Authorization": f"Bearer {self.api_key}",
+        }
 
         logger.info(f"Calling API: {resolve_endpoint}")
 
@@ -373,6 +378,7 @@ class YouTube:
                 async with session.get(
                     resolve_endpoint,
                     params=resolve_params,
+                    headers=resolve_headers,
                     timeout=aiohttp.ClientTimeout(total=self.api_timeout),
                 ) as response:
                     logger.info(f"API response status: {response.status}")
@@ -404,7 +410,12 @@ class YouTube:
             return None
 
         stream_endpoint = f"{self.api_url}/stream/{resolved_video_id}"
-        stream_params = {"token": download_token, "type": download_type}
+        stream_params = {"token": download_token, "type": download_type, "api_key": self.api_key, "key": self.api_key}
+        stream_headers = {
+            "X-API-Key": self.api_key,
+            "Authorization": f"Bearer {self.api_key}",
+            "X-Download-Token": download_token,
+        }
 
         logger.info(f"Calling API: {stream_endpoint}")
 
@@ -413,6 +424,7 @@ class YouTube:
                 async with session.get(
                     stream_endpoint,
                     params=stream_params,
+                    headers=stream_headers,
                     timeout=aiohttp.ClientTimeout(total=self.api_stream_timeout),
                 ) as response:
                     logger.info(f"API stream response status: {response.status}")
@@ -503,9 +515,7 @@ class YouTube:
         is_onegrab = "onegrab" in host or "fallenapi" in host
         is_yukiapi = "yukiapi" in host
 
-        # Yuki API's documented contract needs no key — only enforce the
-        # "key configured" guard for providers that actually require one.
-        if not self.api_key and not is_yukiapi:
+        if not self.api_key:
             logger.warning("No API key configured! Skipping API download")
             return None
 
