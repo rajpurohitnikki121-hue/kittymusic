@@ -358,10 +358,13 @@ class YouTube:
         2. GET /stream/{video_id}?token=<download_token>&type=audio|video
            -> binary media stream, saved to disk.
 
-        The live server requires an API key even though the published
-        docs don't state the exact header/param name, so the key is
-        sent under a few common conventions at once — extra headers or
-        params a server doesn't recognize are normally just ignored.
+        NOTE: the server's own "video_id" field in the /download response
+        is unreliable — it sometimes echoes back the ID from a previous,
+        unrelated request instead of the one just resolved. We already
+        know the correct video_id (it's passed in from the caller), so
+        the stream step uses OUR video_id, never the one the API echoes
+        back — this prevents the wrong song's audio being downloaded
+        under the right song's filename.
         """
         download_type = "video" if video else "audio"
         resolve_endpoint = f"{self.api_url}/download"
@@ -403,13 +406,21 @@ class YouTube:
             logger.error(f"🌐 API client error for {video_id}: {e}")
             return None
 
-        resolved_video_id = payload.get("video_id") if isinstance(payload, dict) else None
         download_token = payload.get("download_token") if isinstance(payload, dict) else None
-        if not resolved_video_id or not download_token:
-            logger.error(f"API /download response missing video_id/download_token: {payload}")
+        if not download_token:
+            logger.error(f"API /download response missing download_token: {payload}")
             return None
 
-        stream_endpoint = f"{self.api_url}/stream/{resolved_video_id}"
+        server_video_id = payload.get("video_id") if isinstance(payload, dict) else None
+        if server_video_id and server_video_id != video_id:
+            logger.warning(
+                f"API echoed a different video_id ({server_video_id}) than requested "
+                f"({video_id}) — using our own video_id for the stream step to avoid "
+                f"downloading the wrong song."
+            )
+
+        # Always use OUR video_id here, never payload's — see docstring above.
+        stream_endpoint = f"{self.api_url}/stream/{video_id}"
         stream_params = {"token": download_token, "type": download_type, "api_key": self.api_key, "key": self.api_key}
         stream_headers = {
             "X-API-Key": self.api_key,
