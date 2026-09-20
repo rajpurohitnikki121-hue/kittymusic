@@ -40,18 +40,23 @@ class YouTube:
         self.checked = False
         self.warned = False
 
-        # Get API configuration from config (generic — one provider only)
+        # PRIMARY provider — tried first.
         self.api_url = config.API_URL
         self.api_key = config.API_KEY
+
+        # FALLBACK provider — tried only if the primary fails on every
+        # retry, or isn't configured at all. Leave blank to disable.
+        self.fallback_api_url = config.FALLBACK_API_URL
+        self.fallback_api_key = config.FALLBACK_API_KEY
+
         self.enable_api = config.ENABLE_API
         self.enable_cookies_fallback = config.ENABLE_COOKIES_FALLBACK
         self.api_timeout = config.API_TIMEOUT
         self.api_stream_timeout = config.API_STREAM_TIMEOUT
 
-        # How many times to retry the SAME configured provider before
-        # giving up on the API and moving to cookies fallback. This is
-        # a retry, not a second provider — API_URL never changes here.
-        self.api_max_attempts = 4
+        # How many times to retry a SINGLE provider before moving on
+        # (to the fallback provider, or to cookies).
+        self.api_max_attempts = 2
         self.api_retry_delay = 2  # seconds between retries
 
         # Regular expression to match YouTube URLs
@@ -71,12 +76,21 @@ class YouTube:
         logger.info("📹 YouTube Handler Initialized")
         logger.info(f"🎵 API Priority: {'ENABLED' if self.enable_api else 'DISABLED'}")
         if self.enable_api:
-            logger.info(f"🔗 API URL: {self.api_url or '(not set)'}")
+            logger.info(f"🔗 Primary API URL: {self.api_url or '(not set)'}")
             if self.api_key:
                 masked_key = self.api_key[:8] + "..." if len(self.api_key) > 8 else "***"
-                logger.info(f"🔑 API Key: {masked_key}")
+                logger.info(f"🔑 Primary API Key: {masked_key}")
             else:
-                logger.warning("⚠️ No API Key configured!")
+                logger.warning("⚠️ No primary API key configured!")
+            if self.fallback_api_url:
+                logger.info(f"🔗 Fallback API URL: {self.fallback_api_url}")
+                if self.fallback_api_key:
+                    masked_fallback = self.fallback_api_key[:8] + "..." if len(self.fallback_api_key) > 8 else "***"
+                    logger.info(f"🔑 Fallback API Key: {masked_fallback}")
+                else:
+                    logger.warning("⚠️ Fallback API URL set but no fallback API key configured!")
+            else:
+                logger.info("🔗 Fallback API: (not configured)")
         logger.info(f"🍪 Cookies Fallback: {'ENABLED' if self.enable_cookies_fallback else 'DISABLED'}")
         logger.info("=" * 50)
 
@@ -192,38 +206,38 @@ class YouTube:
         else:
             logger.error("❌ No cookies saved! Check COOKIE_URL in .env.")
 
-    def _build_api_request(self, video_id: str, download_type: str):
+    def _build_api_request(self, api_url: str, api_key: str, video_id: str, download_type: str):
         """
         Build the (endpoint, params, headers) for providers that expose
         a direct binary /download-style endpoint (used for Sparrow and
-        as a generic fallback for any other API_URL). OneGrab/Fallen and
-        Yuki API are handled separately (see _download_via_onegrab and
-        _download_via_yukiapi) because they return JSON metadata first,
-        not a binary payload on a single /download route.
+        as a generic fallback for any other provider). OneGrab/Fallen
+        and Yuki API are handled separately (see _download_via_onegrab
+        and _download_via_yukiapi) because they return JSON metadata
+        first, not a binary payload on a single /download route.
         """
-        host = self.api_url.lower()
+        host = api_url.lower()
 
         if "sparrow" in host:
             # Sparrow publishes GET /download but not its exact param
             # names, so the id/key are sent under common aliases —
             # extra params most APIs simply ignore.
-            endpoint = f"{self.api_url}/download"
+            endpoint = f"{api_url}/download"
             params = {
                 "url": video_id,
                 "query": video_id,
                 "id": video_id,
                 "type": download_type,
                 "format": download_type,
-                "api_key": self.api_key,
-                "key": self.api_key,
+                "api_key": api_key,
+                "key": api_key,
             }
-            headers = {"Authorization": f"Bearer {self.api_key}"}
+            headers = {"Authorization": f"Bearer {api_key}"}
             return endpoint, params, headers
 
-        # Generic contract — used for any API_URL not recognized above.
-        endpoint = f"{self.api_url}/download"
-        params = {"url": video_id, "type": download_type, "api_key": self.api_key}
-        headers = {"Authorization": f"Bearer {self.api_key}"}
+        # Generic contract — used for any provider not recognized above.
+        endpoint = f"{api_url}/download"
+        params = {"url": video_id, "type": download_type, "api_key": api_key}
+        headers = {"Authorization": f"Bearer {api_key}"}
         return endpoint, params, headers
 
     @staticmethod
@@ -299,16 +313,16 @@ class YouTube:
             logger.error(f"❌ Failed to download stream link for {video_id}: {e}")
             return None
 
-    async def _download_via_onegrab(self, link: str, video: bool, file_path: str, video_id: str) -> Optional[str]:
+    async def _download_via_onegrab(self, api_url: str, api_key: str, link: str, video: bool, file_path: str, video_id: str) -> Optional[str]:
         """
         OneGrab/Fallen-family flow:
         GET /api/track?url=<youtube_url>&video=true|false
         -> JSON with a "cdnurl" field holding the actual file link
         -> download that link to disk.
         """
-        endpoint = f"{self.api_url}/api/track"
+        endpoint = f"{api_url}/api/track"
         params = {"url": link, "video": str(video).lower()}
-        headers = {"Authorization": f"Bearer {self.api_key}"} if self.api_key else {}
+        headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
 
         logger.info(f"Calling API: {endpoint}")
 
@@ -350,7 +364,7 @@ class YouTube:
         download_type = "video" if video else "audio"
         return await self._download_binary(cdn_url, file_path, {}, download_type, video_id)
 
-    async def _download_via_yukiapi(self, link: str, video: bool, file_path: str, video_id: str) -> Optional[str]:
+    async def _download_via_yukiapi(self, api_url: str, api_key: str, link: str, video: bool, file_path: str, video_id: str) -> Optional[str]:
         """
         Yuki API flow (music.yukiapi.site), per its published API_DOCS.md:
         1. GET /download?url=<link>&type=audio|video
@@ -367,11 +381,11 @@ class YouTube:
         under the right song's filename.
         """
         download_type = "video" if video else "audio"
-        resolve_endpoint = f"{self.api_url}/download"
-        resolve_params = {"url": link, "type": download_type, "api_key": self.api_key, "key": self.api_key}
+        resolve_endpoint = f"{api_url}/download"
+        resolve_params = {"url": link, "type": download_type, "api_key": api_key, "key": api_key}
         resolve_headers = {
-            "X-API-Key": self.api_key,
-            "Authorization": f"Bearer {self.api_key}",
+            "X-API-Key": api_key,
+            "Authorization": f"Bearer {api_key}",
         }
 
         logger.info(f"Calling API: {resolve_endpoint}")
@@ -420,11 +434,11 @@ class YouTube:
             )
 
         # Always use OUR video_id here, never payload's — see docstring above.
-        stream_endpoint = f"{self.api_url}/stream/{video_id}"
-        stream_params = {"token": download_token, "type": download_type, "api_key": self.api_key, "key": self.api_key}
+        stream_endpoint = f"{api_url}/stream/{video_id}"
+        stream_params = {"token": download_token, "type": download_type, "api_key": api_key, "key": api_key}
         stream_headers = {
-            "X-API-Key": self.api_key,
-            "Authorization": f"Bearer {self.api_key}",
+            "X-API-Key": api_key,
+            "Authorization": f"Bearer {api_key}",
             "X-Download-Token": download_token,
         }
 
@@ -456,10 +470,10 @@ class YouTube:
             logger.error(f"🌐 API stream client error for {video_id}: {e}")
             return None
 
-    async def _download_via_generic(self, video_id: str, download_type: str, file_path: str) -> Optional[str]:
+    async def _download_via_generic(self, api_url: str, api_key: str, video_id: str, download_type: str, file_path: str) -> Optional[str]:
         """Binary /download-style flow used for Sparrow and any other
-        unrecognized API_URL (see _build_api_request)."""
-        endpoint, params, headers = self._build_api_request(video_id, download_type)
+        unrecognized provider (see _build_api_request)."""
+        endpoint, params, headers = self._build_api_request(api_url, api_key, video_id, download_type)
         logger.info(f"Calling API: {endpoint}")
 
         async with aiohttp.ClientSession() as session:
@@ -497,15 +511,58 @@ class YouTube:
 
                 return await self._save_binary_response(response, file_path, download_type, video_id)
 
+    async def _try_provider(self, api_url: str, api_key: str, link: str, video: bool, file_path: str, video_id: str, download_type: str, label: str) -> Optional[str]:
+        """
+        Try ONE provider (identified by api_url/api_key), retrying it
+        up to self.api_max_attempts times before giving up on it. Does
+        not touch any other provider — the caller decides what to try
+        next if this returns None.
+        """
+        if not api_url or not api_key:
+            return None
+
+        host = api_url.lower()
+        is_onegrab = "onegrab" in host or "fallenapi" in host
+        is_yukiapi = "yukiapi" in host
+
+        for attempt in range(1, self.api_max_attempts + 1):
+            try:
+                if attempt > 1:
+                    logger.info(f"🔁 [{label} RETRY {attempt}/{self.api_max_attempts}] Retrying for {video_id}")
+                else:
+                    logger.info(f"🚀 [{label}] Requesting {video_id} (type: {download_type})")
+
+                if is_onegrab:
+                    result = await self._download_via_onegrab(api_url, api_key, link, video, file_path, video_id)
+                elif is_yukiapi:
+                    result = await self._download_via_yukiapi(api_url, api_key, link, video, file_path, video_id)
+                else:
+                    result = await self._download_via_generic(api_url, api_key, video_id, download_type, file_path)
+
+                if result:
+                    return result
+
+            except asyncio.TimeoutError:
+                logger.error(f"⏰ [{label}] Timeout for {video_id} after {self.api_stream_timeout} seconds")
+            except aiohttp.ClientError as e:
+                logger.error(f"🌐 [{label}] Client error for {video_id}: {e}")
+            except Exception as e:
+                logger.error(f"❌ [{label}] Download failed for {video_id}: {type(e).__name__}: {e}")
+
+            if attempt < self.api_max_attempts:
+                await asyncio.sleep(self.api_retry_delay)
+
+        return None
+
     async def download_via_api(self, link: str, video: bool = False) -> Optional[str]:
         """
-        Download audio/video using the configured music API (Primary Method).
+        Download audio/video using the configured music APIs.
 
-        Provider is chosen ENTIRELY by API_URL / API_KEY — one active
-        provider at a time, no automatic fallback to another provider.
-        If the provider fails transiently, the SAME provider is retried
-        a few times (self.api_max_attempts) before giving up — this is
-        a retry, not a second API.
+        Order: PRIMARY provider (API_URL/API_KEY, retried
+        api_max_attempts times) -> FALLBACK provider
+        (FALLBACK_API_URL/FALLBACK_API_KEY, also retried), only if the
+        primary is unset or fails completely. Cookies (in download())
+        remain the final backup after both.
 
         Args:
             link: YouTube URL or video ID
@@ -516,18 +573,6 @@ class YouTube:
         """
         if not self.enable_api:
             logger.info("API is disabled in config (ENABLE_API is False)")
-            return None
-
-        if not self.api_url:
-            logger.info("API_URL not configured, skipping API download")
-            return None
-
-        host = self.api_url.lower()
-        is_onegrab = "onegrab" in host or "fallenapi" in host
-        is_yukiapi = "yukiapi" in host
-
-        if not self.api_key:
-            logger.warning("No API key configured! Skipping API download")
             return None
 
         # Extract video ID from URL
@@ -556,35 +601,27 @@ class YouTube:
 
         download_type = "video" if video else "audio"
 
-        for attempt in range(1, self.api_max_attempts + 1):
-            try:
-                if attempt > 1:
-                    logger.info(
-                        f"🔁 [API RETRY {attempt}/{self.api_max_attempts}] "
-                        f"Retrying same provider for {video_id}"
-                    )
-                else:
-                    logger.info(f"🚀 [API PRIMARY] Requesting {video_id} from configured API (type: {download_type})")
+        # PRIMARY
+        if self.api_url and self.api_key:
+            result = await self._try_provider(
+                self.api_url, self.api_key, link, video, file_path, video_id, download_type, "PRIMARY"
+            )
+            if result:
+                return result
+            logger.warning(f"⚠️ [PRIMARY FAILED] {video_id}, trying fallback API...")
+        else:
+            logger.info("Primary API_URL/API_KEY not configured, skipping to fallback API")
 
-                if is_onegrab:
-                    result = await self._download_via_onegrab(link, video, file_path, video_id)
-                elif is_yukiapi:
-                    result = await self._download_via_yukiapi(link, video, file_path, video_id)
-                else:
-                    result = await self._download_via_generic(video_id, download_type, file_path)
-
-                if result:
-                    return result
-
-            except asyncio.TimeoutError:
-                logger.error(f"⏰ API timeout for {video_id} after {self.api_stream_timeout} seconds")
-            except aiohttp.ClientError as e:
-                logger.error(f"🌐 API client error for {video_id}: {e}")
-            except Exception as e:
-                logger.error(f"❌ API download failed for {video_id}: {type(e).__name__}: {e}")
-
-            if attempt < self.api_max_attempts:
-                await asyncio.sleep(self.api_retry_delay)
+        # FALLBACK
+        if self.fallback_api_url and self.fallback_api_key:
+            result = await self._try_provider(
+                self.fallback_api_url, self.fallback_api_key, link, video, file_path, video_id, download_type, "FALLBACK"
+            )
+            if result:
+                return result
+            logger.warning(f"⚠️ [FALLBACK FAILED] {video_id}")
+        else:
+            logger.debug("No fallback API configured")
 
         return None
 
@@ -888,7 +925,7 @@ class YouTube:
         """
         Download audio/video from YouTube.
 
-        PRIORITY: API First → Cookies Fallback
+        PRIORITY: Primary API -> Fallback API -> Cookies
 
         Args:
             video_id: YouTube video ID
@@ -970,7 +1007,7 @@ class YouTube:
             return result
 
         logger.warning(
-            f"⚠️ [API FAILED] {video_id}, "
+            f"⚠️ [ALL APIs FAILED] {video_id}, "
             f"trying cookies fallback..."
         )
 
@@ -980,7 +1017,7 @@ class YouTube:
 
         if self.enable_cookies_fallback:
             logger.info(
-                f"🍪 [PRIORITY 2] Trying cookies "
+                f"🍪 [PRIORITY 3] Trying cookies "
                 f"download for {video_id}"
             )
 
