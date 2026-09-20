@@ -57,13 +57,17 @@ class Config:
         self.VIDEO_PLAY: bool = self._str_to_bool(getenv("VIDEO_PLAY", "True"))
         self.VIDEO_MAX_HEIGHT: int = self._parse_video_height()
 
-        # Music API — generic, single-provider configuration.
-        # Whichever API_URL/API_KEY you set is the ONE active provider.
-        # There is no automatic fallback between providers and nothing
-        # is hardcoded to a specific one (Sparrow, OneGrab/Fallen, etc.
-        # all work through these same two variables).
+        # Music API — PRIMARY provider. Whichever API_URL/API_KEY you set
+        # is tried first.
         self.API_URL: str = getenv("API_URL", "").rstrip("/")
         self.API_KEY: str = getenv("API_KEY", "")
+
+        # Music API — FALLBACK provider. Only used if the primary API
+        # (above) fails on every retry. Leave both blank to disable the
+        # fallback entirely and only use cookies as backup.
+        self.FALLBACK_API_URL: str = getenv("FALLBACK_API_URL", "").rstrip("/")
+        self.FALLBACK_API_KEY: str = getenv("FALLBACK_API_KEY", "")
+
         self.ENABLE_API: bool = self._str_to_bool(getenv("ENABLE_API", "True"))
         self.ENABLE_COOKIES_FALLBACK: bool = self._str_to_bool(getenv("ENABLE_COOKIES_FALLBACK", "True"))
         self.API_TIMEOUT: int = int(getenv("API_TIMEOUT", "60"))
