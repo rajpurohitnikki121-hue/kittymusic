@@ -16,6 +16,7 @@
 
 from os import getenv
 from typing import List
+from urllib.parse import urlparse
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -58,15 +59,17 @@ class Config:
         self.VIDEO_MAX_HEIGHT: int = self._parse_video_height()
 
         # Music API — PRIMARY provider. Whichever API_URL/API_KEY you set
-        # is tried first.
-        self.API_URL: str = getenv("API_URL", "").rstrip("/")
-        self.API_KEY: str = getenv("API_KEY", "")
+        # is tried first. Example: API_URL=https://api.onegrab.fun
+        # (only the host is kept; any path like /pricing is dropped).
+        self.API_URL: str = self._clean_base_url(getenv("API_URL", ""))
+        self.API_KEY: str = getenv("API_KEY", "").strip()
 
         # Music API — FALLBACK provider. Only used if the primary API
         # (above) fails on every retry. Leave both blank to disable the
         # fallback entirely and only use cookies as backup.
-        self.FALLBACK_API_URL: str = getenv("FALLBACK_API_URL", "").rstrip("/")
-        self.FALLBACK_API_KEY: str = getenv("FALLBACK_API_KEY", "")
+        # Example: FALLBACK_API_URL=https://music.yukiapi.site
+        self.FALLBACK_API_URL: str = self._clean_base_url(getenv("FALLBACK_API_URL", ""))
+        self.FALLBACK_API_KEY: str = getenv("FALLBACK_API_KEY", "").strip()
 
         self.ENABLE_API: bool = self._str_to_bool(getenv("ENABLE_API", "True"))
         self.ENABLE_COOKIES_FALLBACK: bool = self._str_to_bool(getenv("ENABLE_COOKIES_FALLBACK", "True"))
@@ -84,6 +87,20 @@ class Config:
 
         # Moderation
         self.EXCLUDED_USERNAMES: List[str] = getenv("EXCLUDED_USERNAMES", "").split()
+
+    @staticmethod
+    def _clean_base_url(url: str) -> str:
+        """Keep only scheme://host so a stray path (/pricing, /api) or
+        trailing slash in the env var can't break API calls."""
+        url = (url or "").strip()
+        if not url:
+            return ""
+        if "://" not in url:
+            url = "https://" + url
+        parsed = urlparse(url)
+        if not parsed.netloc:
+            return ""
+        return f"{parsed.scheme}://{parsed.netloc}"
 
     def _parse_video_height(self) -> int:
         default_height = 1080
@@ -137,6 +154,8 @@ class Config:
             print("Warning: ENABLE_API is True but API_URL is not set")
         if self.ENABLE_API and not self.API_KEY:
             print("Warning: ENABLE_API is True but API_KEY is not set")
+        if self.ENABLE_API and self.FALLBACK_API_URL and not self.FALLBACK_API_KEY:
+            print("Warning: FALLBACK_API_URL is set but FALLBACK_API_KEY is not set")
 
 
 config = Config()
