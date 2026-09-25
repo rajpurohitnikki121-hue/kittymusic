@@ -307,8 +307,6 @@ class YouTube:
 
         actual_size = os.path.getsize(file_path)
         if actual_size < self.min_valid_file_bytes:
-            # Peek at the content to log something useful, then discard —
-            # this is almost always a JSON/text error body, not audio.
             try:
                 with open(file_path, "rb") as f:
                     preview = f.read(200)
@@ -354,10 +352,22 @@ class YouTube:
         GET /api/track?url=<youtube_url>&video=true|false
         -> JSON with a "cdnurl" field holding the actual file link
         -> download that link to disk.
+
+        The key is sent BOTH as a Bearer header and as common query
+        param aliases — their docs implied header-only auth, but a
+        "Missing API Key" error with the header present suggests the
+        endpoint actually expects it as a query param instead (or in
+        addition). Sending both is harmless if only one is checked.
         """
         endpoint = f"{api_url}/api/track"
-        params = {"url": link, "video": str(video).lower()}
-        headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
+        params = {
+            "url": link,
+            "video": str(video).lower(),
+            "api_key": api_key,
+            "key": api_key,
+            "apikey": api_key,
+        }
+        headers = {"Authorization": f"Bearer {api_key}", "X-API-Key": api_key} if api_key else {}
 
         logger.info(f"Calling API: {endpoint}")
 
