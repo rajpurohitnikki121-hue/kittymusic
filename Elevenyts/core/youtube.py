@@ -59,11 +59,11 @@ class YouTube:
         self.api_max_attempts = 2
         self.api_retry_delay = 2  # seconds between retries
 
-        # A real audio file for even a short song is well over this
-        # size. Anything smaller returned with HTTP 200 is treated as
-        # a failed download (an error page/placeholder the provider
-        # served instead of actual audio), not a success.
-        self.min_valid_file_bytes = 20 * 1024  # 20 KB
+        # A real full-length audio file is well over this size even at
+        # low bitrates. Providers sometimes return HTTP 200 with a tiny
+        # error/placeholder payload instead of actual audio — anything
+        # under this is treated as a failed download, not a success.
+        self.min_valid_file_bytes = 200 * 1024  # 200 KB
 
         # Regular expression to match YouTube URLs
         self.regex = re.compile(
@@ -264,16 +264,36 @@ class YouTube:
                         return value
         return None
 
+    @staticmethod
+    def _looks_like_text_error(data: bytes) -> bool:
+        """Sniff a chunk of bytes to see if it's actually text/JSON (an
+        error body) rather than binary audio/video data. Real MP3/M4A
+        files start with binary frame headers, never with '{', '[',
+        '<', or a run of plain ASCII text."""
+        if not data:
+            return True
+        sample = data[:64].lstrip()
+        if not sample:
+            return True
+        if sample[0:1] in (b"{", b"[", b"<"):
+            return True
+        try:
+            sample.decode("ascii")
+            return True
+        except UnicodeDecodeError:
+            return False
+
     async def _save_binary_response(self, response, file_path: str, download_type: str, video_id: str) -> Optional[str]:
         """Stream an aiohttp response body to disk with progress logging.
 
-        After writing, the file is sanity-checked: a real audio/video
-        file is well over self.min_valid_file_bytes. If the response
-        was too small (a provider serving an error page, an expired
-        link placeholder, or similar with HTTP 200), the file is
-        deleted and treated as a failed download so the caller retries
-        or falls through to the next provider/cookies, instead of
-        silently handing the player a corrupt file.
+        After writing, the file is sanity-checked two ways: it must be
+        well over self.min_valid_file_bytes, AND its first bytes must
+        not look like text/JSON. If either check fails (a provider
+        serving an error page, an expired-link placeholder, or a tiny
+        preview clip with HTTP 200), the file is deleted and treated
+        as a failed download so the caller retries or falls through to
+        the next provider/cookies, instead of silently handing the
+        player a corrupt or non-audio file.
         """
         logger.info(f"📥 Downloading {download_type} via API for {video_id}...")
 
@@ -284,8 +304,11 @@ class YouTube:
 
         downloaded = 0
         last_log = 0
+        first_chunk: Optional[bytes] = None
         with open(file_path, "wb") as f:
             async for chunk in response.content.iter_chunked(65536):
+                if first_chunk is None:
+                    first_chunk = chunk
                 f.write(chunk)
                 downloaded += len(chunk)
 
@@ -306,20 +329,24 @@ class YouTube:
             return None
 
         actual_size = os.path.getsize(file_path)
-        if actual_size < self.min_valid_file_bytes:
+
+        if first_chunk and self._looks_like_text_error(first_chunk):
             try:
-                with open(file_path, "rb") as f:
-                    preview = f.read(200)
                 logger.error(
-                    f"❌ API returned a suspiciously small file "
-                    f"({actual_size} bytes) for {video_id} — treating as "
-                    f"failed. Content preview: {preview!r}"
+                    f"❌ API returned text/JSON instead of audio for {video_id} "
+                    f"({actual_size} bytes). Content preview: {first_chunk[:200]!r}"
                 )
             except Exception:
-                logger.error(
-                    f"❌ API returned a suspiciously small file "
-                    f"({actual_size} bytes) for {video_id} — treating as failed."
-                )
+                logger.error(f"❌ API returned non-audio content for {video_id} ({actual_size} bytes)")
+            os.remove(file_path)
+            return None
+
+        if actual_size < self.min_valid_file_bytes:
+            logger.error(
+                f"❌ API returned a suspiciously small file "
+                f"({actual_size} bytes) for {video_id} — treating as failed "
+                f"(likely a preview clip or error payload, not the full track)."
+            )
             os.remove(file_path)
             return None
 
@@ -355,7 +382,7 @@ class YouTube:
 
         The key is sent BOTH as a Bearer header and as common query
         param aliases — their docs implied header-only auth, but a
-        "Missing API Key" error with the header present suggests the
+        "Missing API Key" error with the header present suggested the
         endpoint actually expects it as a query param instead (or in
         addition). Sending both is harmless if only one is checked.
         """
