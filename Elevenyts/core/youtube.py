@@ -216,12 +216,22 @@ class YouTube:
         """
         Build the (endpoint, params, headers) for providers that expose
         a direct binary /download-style endpoint (used for Sparrow and
-        as a generic fallback for any other provider). OneGrab/Fallen
-        and Yuki API are handled separately (see _download_via_onegrab
-        and _download_via_yukiapi) because they return JSON metadata
-        first, not a binary payload on a single /download route.
+        Shrutibots, and as a generic fallback for any other provider).
+        OneGrab/Fallen and Yuki API are handled separately (see
+        _download_via_onegrab and _download_via_yukiapi) because they
+        return JSON metadata first, not a binary payload on a single
+        /download route.
         """
         host = api_url.lower()
+
+        if "shrutibots" in host:
+            # Shrutibots' own reference client: GET /download with
+            # exactly url, type, api_key as query params, no headers,
+            # response streamed directly as the binary file.
+            endpoint = f"{api_url}/download"
+            params = {"url": video_id, "type": download_type, "api_key": api_key}
+            headers = {}
+            return endpoint, params, headers
 
         if "sparrow" in host:
             # Sparrow publishes GET /download but not its exact param
@@ -266,10 +276,10 @@ class YouTube:
 
     @staticmethod
     def _looks_like_text_error(data: bytes) -> bool:
-        """Sniff a chunk of bytes to see if it's actually text/JSON (an
-        error body) rather than binary audio/video data. Real MP3/M4A
-        files start with binary frame headers, never with '{', '[',
-        '<', or a run of plain ASCII text."""
+        """Sniff a chunk of bytes to see if it's actually text/JSON/HTML
+        (an error body or a webpage) rather than binary audio/video
+        data. Real MP3/M4A files start with binary frame headers,
+        never with '{', '[', '<', or a run of plain ASCII text."""
         if not data:
             return True
         sample = data[:64].lstrip()
@@ -288,12 +298,12 @@ class YouTube:
 
         After writing, the file is sanity-checked two ways: it must be
         well over self.min_valid_file_bytes, AND its first bytes must
-        not look like text/JSON. If either check fails (a provider
-        serving an error page, an expired-link placeholder, or a tiny
-        preview clip with HTTP 200), the file is deleted and treated
-        as a failed download so the caller retries or falls through to
-        the next provider/cookies, instead of silently handing the
-        player a corrupt or non-audio file.
+        not look like text/JSON/HTML. If either check fails (a provider
+        serving an error page, a Telegram preview page, an expired-link
+        placeholder, or a tiny preview clip with HTTP 200), the file is
+        deleted and treated as a failed download so the caller retries
+        or falls through to the next provider/cookies, instead of
+        silently handing the player a corrupt or non-audio file.
         """
         logger.info(f"📥 Downloading {download_type} via API for {video_id}...")
 
@@ -333,7 +343,7 @@ class YouTube:
         if first_chunk and self._looks_like_text_error(first_chunk):
             try:
                 logger.error(
-                    f"❌ API returned text/JSON instead of audio for {video_id} "
+                    f"❌ API returned text/JSON/HTML instead of audio for {video_id} "
                     f"({actual_size} bytes). Content preview: {first_chunk[:200]!r}"
                 )
             except Exception:
@@ -380,11 +390,12 @@ class YouTube:
         -> JSON with a "cdnurl" field holding the actual file link
         -> download that link to disk.
 
-        The key is sent BOTH as a Bearer header and as common query
-        param aliases — their docs implied header-only auth, but a
-        "Missing API Key" error with the header present suggested the
-        endpoint actually expects it as a query param instead (or in
-        addition). Sending both is harmless if only one is checked.
+        NOTE: this provider's cdnurl has been observed to sometimes be
+        a Telegram (t.me) link, which does not serve raw file bytes
+        over a plain GET — it returns Telegram's HTML preview page
+        instead. The binary/text sniff in _save_binary_response catches
+        this and treats it as a failure rather than corrupting the
+        downloaded file.
         """
         endpoint = f"{api_url}/api/track"
         params = {
@@ -543,8 +554,8 @@ class YouTube:
             return None
 
     async def _download_via_generic(self, api_url: str, api_key: str, video_id: str, download_type: str, file_path: str) -> Optional[str]:
-        """Binary /download-style flow used for Sparrow and any other
-        unrecognized provider (see _build_api_request)."""
+        """Binary /download-style flow used for Shrutibots, Sparrow, and
+        any other unrecognized provider (see _build_api_request)."""
         endpoint, params, headers = self._build_api_request(api_url, api_key, video_id, download_type)
         logger.info(f"Calling API: {endpoint}")
 
