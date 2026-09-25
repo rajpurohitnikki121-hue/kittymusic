@@ -25,7 +25,6 @@ import aiohttp
 from dataclasses import replace
 from pathlib import Path
 from typing import Optional, Union
-from urllib.parse import urlparse
 
 from pyrogram import enums, types
 from py_yt import Playlist, VideosSearch
@@ -41,16 +40,14 @@ class YouTube:
         self.checked = False
         self.warned = False
 
-        # PRIMARY provider — tried first (set API_URL / API_KEY in env).
-        # Recommended: https://api.onegrab.fun
-        self.api_url = self._clean_base(config.API_URL)
-        self.api_key = (config.API_KEY or "").strip()
+        # PRIMARY provider — tried first.
+        self.api_url = config.API_URL
+        self.api_key = config.API_KEY
 
         # FALLBACK provider — tried only if the primary fails on every
         # retry, or isn't configured at all. Leave blank to disable.
-        # Recommended: https://music.yukiapi.site
-        self.fallback_api_url = self._clean_base(config.FALLBACK_API_URL)
-        self.fallback_api_key = (config.FALLBACK_API_KEY or "").strip()
+        self.fallback_api_url = config.FALLBACK_API_URL
+        self.fallback_api_key = config.FALLBACK_API_KEY
 
         self.enable_api = config.ENABLE_API
         self.enable_cookies_fallback = config.ENABLE_COOKIES_FALLBACK
@@ -61,6 +58,12 @@ class YouTube:
         # (to the fallback provider, or to cookies).
         self.api_max_attempts = 2
         self.api_retry_delay = 2  # seconds between retries
+
+        # A real audio file for even a short song is well over this
+        # size. Anything smaller returned with HTTP 200 is treated as
+        # a failed download (an error page/placeholder the provider
+        # served instead of actual audio), not a success.
+        self.min_valid_file_bytes = 20 * 1024  # 20 KB
 
         # Regular expression to match YouTube URLs
         self.regex = re.compile(
@@ -97,20 +100,6 @@ class YouTube:
         logger.info(f"🍪 Cookies Fallback: {'ENABLED' if self.enable_cookies_fallback else 'DISABLED'}")
         logger.info("=" * 50)
 
-    @staticmethod
-    def _clean_base(url: str) -> str:
-        """Reduce any URL to just scheme://host so a wrong path such as
-        /pricing or a trailing slash in the env var can't break API calls."""
-        url = (url or "").strip()
-        if not url:
-            return ""
-        if "://" not in url:
-            url = "https://" + url
-        parsed = urlparse(url)
-        if not parsed.netloc:
-            return ""
-        return f"{parsed.scheme}://{parsed.netloc}"
-
     def _locate_download_file(self, video_id: str, video: bool = False) -> Optional[str]:
         """Locate any completed download file for a video id."""
         pattern = f"downloads/{video_id}*"
@@ -146,7 +135,7 @@ class YouTube:
 
         Re-scans the cookies folder every time self.cookies is empty so
         that newly added cookie files are picked up without a bot
-        restart.
+        restart (previously this only scanned once, ever).
         """
         if not self.checked or not self.cookies:
             cookies_dir = "Elevenyts/cookies"
@@ -227,14 +216,17 @@ class YouTube:
         """
         Build the (endpoint, params, headers) for providers that expose
         a direct binary /download-style endpoint (used for Sparrow and
-        as a generic fallback for any other provider). OneGrab and Yuki
-        API are handled separately (see _download_via_onegrab and
-        _download_via_yukiapi) because they return JSON metadata first,
-        not a binary payload on a single /download route.
+        as a generic fallback for any other provider). OneGrab/Fallen
+        and Yuki API are handled separately (see _download_via_onegrab
+        and _download_via_yukiapi) because they return JSON metadata
+        first, not a binary payload on a single /download route.
         """
         host = api_url.lower()
 
         if "sparrow" in host:
+            # Sparrow publishes GET /download but not its exact param
+            # names, so the id/key are sent under common aliases —
+            # extra params most APIs simply ignore.
             endpoint = f"{api_url}/download"
             params = {
                 "url": video_id,
@@ -259,58 +251,30 @@ class YouTube:
         """Look for a stream/download URL in a few common JSON shapes."""
         if not isinstance(payload, dict):
             return None
-        keys = ("url", "download_url", "downloadUrl", "link", "stream_url", "streamUrl", "cdnurl")
-        for key in keys:
+        for key in ("url", "download_url", "downloadUrl", "link", "stream_url", "streamUrl", "cdnurl"):
             value = payload.get(key)
             if isinstance(value, str) and value.startswith("http"):
                 return value
         for wrapper in ("result", "data"):
             nested = payload.get(wrapper)
             if isinstance(nested, dict):
-                for key in keys:
+                for key in ("url", "download_url", "downloadUrl", "link", "stream_url", "streamUrl", "cdnurl"):
                     value = nested.get(key)
                     if isinstance(value, str) and value.startswith("http"):
                         return value
         return None
 
-    @staticmethod
-    def _extract_onegrab_link(payload) -> Optional[str]:
-        """OneGrab returns the file link in "cdnurl" (may be nested).
-        Falls back to other common keys, but never accepts a plain
-        YouTube page link (that is metadata, not a media file)."""
-        if not isinstance(payload, dict):
-            return None
-
-        containers = [payload]
-        for wrapper in ("result", "data"):
-            nested = payload.get(wrapper)
-            if isinstance(nested, dict):
-                containers.append(nested)
-        # Some APIs wrap results in a list, e.g. {"results": [ {...} ]}
-        for wrapper in ("results", "result", "data"):
-            nested = payload.get(wrapper)
-            if isinstance(nested, list) and nested and isinstance(nested[0], dict):
-                containers.append(nested[0])
-
-        for box in containers:
-            value = box.get("cdnurl")
-            if isinstance(value, str) and value.startswith("http"):
-                return value
-
-        for box in containers:
-            for key in ("download_url", "downloadUrl", "stream_url", "streamUrl", "link", "url"):
-                value = box.get(key)
-                if (
-                    isinstance(value, str)
-                    and value.startswith("http")
-                    and "youtube.com/watch" not in value
-                    and "youtu.be/" not in value
-                ):
-                    return value
-        return None
-
     async def _save_binary_response(self, response, file_path: str, download_type: str, video_id: str) -> Optional[str]:
-        """Stream an aiohttp response body to disk with progress logging."""
+        """Stream an aiohttp response body to disk with progress logging.
+
+        After writing, the file is sanity-checked: a real audio/video
+        file is well over self.min_valid_file_bytes. If the response
+        was too small (a provider serving an error page, an expired
+        link placeholder, or similar with HTTP 200), the file is
+        deleted and treated as a failed download so the caller retries
+        or falls through to the next provider/cookies, instead of
+        silently handing the player a corrupt file.
+        """
         logger.info(f"📥 Downloading {download_type} via API for {video_id}...")
 
         content_length = response.headers.get('content-length')
@@ -335,15 +299,35 @@ class YouTube:
                         logger.info(f"📊 Downloaded: {progress_mb:.1f} MB")
                     last_log = downloaded
 
-        if os.path.exists(file_path) and os.path.getsize(file_path) > 0:
-            file_size_mb = os.path.getsize(file_path) / (1024 * 1024)
-            logger.info(f"✅ [API SUCCESS] Downloaded: {file_path} ({file_size_mb:.2f} MB)")
-            return file_path
-        else:
+        if not os.path.exists(file_path) or os.path.getsize(file_path) == 0:
             logger.error("❌ API download failed: file is empty or not created")
             if os.path.exists(file_path):
                 os.remove(file_path)
             return None
+
+        actual_size = os.path.getsize(file_path)
+        if actual_size < self.min_valid_file_bytes:
+            # Peek at the content to log something useful, then discard —
+            # this is almost always a JSON/text error body, not audio.
+            try:
+                with open(file_path, "rb") as f:
+                    preview = f.read(200)
+                logger.error(
+                    f"❌ API returned a suspiciously small file "
+                    f"({actual_size} bytes) for {video_id} — treating as "
+                    f"failed. Content preview: {preview!r}"
+                )
+            except Exception:
+                logger.error(
+                    f"❌ API returned a suspiciously small file "
+                    f"({actual_size} bytes) for {video_id} — treating as failed."
+                )
+            os.remove(file_path)
+            return None
+
+        file_size_mb = actual_size / (1024 * 1024)
+        logger.info(f"✅ [API SUCCESS] Downloaded: {file_path} ({file_size_mb:.2f} MB)")
+        return file_path
 
     async def _download_binary(self, url: str, file_path: str, headers: dict, download_type: str, video_id: str) -> Optional[str]:
         """Download a binary file from a direct link (used when the API
@@ -366,24 +350,14 @@ class YouTube:
 
     async def _download_via_onegrab(self, api_url: str, api_key: str, link: str, video: bool, file_path: str, video_id: str) -> Optional[str]:
         """
-        OneGrab flow:
+        OneGrab/Fallen-family flow:
         GET /api/track?url=<youtube_url>&video=true|false
         -> JSON with a "cdnurl" field holding the actual file link
         -> download that link to disk.
-
-        The API key is sent both as a header (Bearer + X-API-Key) and as
-        a query param, because the docs don't make clear which one the
-        server reads.
         """
         endpoint = f"{api_url}/api/track"
         params = {"url": link, "video": str(video).lower()}
-        headers = {}
-        if api_key:
-            params["api_key"] = api_key
-            headers = {
-                "Authorization": f"Bearer {api_key}",
-                "X-API-Key": api_key,
-            }
+        headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
 
         logger.info(f"Calling API: {endpoint}")
 
@@ -417,9 +391,9 @@ class YouTube:
             logger.error(f"🌐 API client error for {video_id}: {e}")
             return None
 
-        cdn_url = self._extract_onegrab_link(payload)
+        cdn_url = payload.get("cdnurl") if isinstance(payload, dict) else None
         if not cdn_url:
-            logger.error(f"API response had no cdnurl/download link: {str(payload)[:300]}")
+            logger.error(f"API response had no cdnurl: {payload}")
             return None
 
         download_type = "video" if video else "audio"
@@ -435,8 +409,11 @@ class YouTube:
 
         NOTE: the server's own "video_id" field in the /download response
         is unreliable — it sometimes echoes back the ID from a previous,
-        unrelated request. We already know the correct video_id, so the
-        stream step uses OUR video_id, never the one the API echoes back.
+        unrelated request instead of the one just resolved. We already
+        know the correct video_id (it's passed in from the caller), so
+        the stream step uses OUR video_id, never the one the API echoes
+        back — this prevents the wrong song's audio being downloaded
+        under the right song's filename.
         """
         download_type = "video" if video else "audio"
         resolve_endpoint = f"{api_url}/download"
@@ -653,7 +630,7 @@ class YouTube:
         file_path = os.path.join(DOWNLOAD_DIR, f"{video_id}{file_ext}")
 
         # Check if already downloaded
-        if os.path.exists(file_path) and os.path.getsize(file_path) > 0:
+        if os.path.exists(file_path) and os.path.getsize(file_path) >= self.min_valid_file_bytes:
             logger.debug(f"File already exists: {file_path}")
             return file_path
 
@@ -682,27 +659,6 @@ class YouTube:
             logger.debug("No fallback API configured")
 
         return None
-
-    @staticmethod
-    def _ytdlp_extractor_args() -> dict:
-        """Shared yt-dlp options that make YouTube extraction work on
-        cloud/datacenter IPs.
-
-        - "android" client is dropped: it doesn't support cookies.
-        - js_runtimes: yt-dlp needs Deno (or Node) to solve YouTube's
-          signature / n-challenge. Install Deno in the Dockerfile.
-        - remote_components: lets yt-dlp fetch the challenge solver
-          script if it is not bundled.
-        """
-        return {
-            "js_runtimes": {"deno": {}, "node": {}},
-            "remote_components": ["ejs:github"],
-            "extractor_args": {
-                "youtube": {
-                    "player_client": ["mweb", "web", "tv"],
-                },
-            },
-        }
 
     async def download_via_cookies(self, video_id: str, video: bool = False) -> Optional[str]:
         """
@@ -783,7 +739,19 @@ class YouTube:
                 "fragment_retries": 2,
                 "extractor_retries": 5,
                 "sleep_interval_requests": 1,
-                **self._ytdlp_extractor_args(),
+                # Fix: without spoofing the player client, YouTube often
+                # serves cloud/datacenter IPs (Render, Heroku, etc.) a
+                # restricted format list that doesn't match
+                # "bestaudio/best", causing "Requested format is not
+                # available" even though cookies are valid. Trying
+                # extra clients (tv, android) beyond mweb/web sometimes
+                # bypasses the SABR-only restriction.
+                "extractor_args": {
+                    "youtube": {
+                        "player_client": ["mweb", "web", "tv", "android"],
+                    },
+                    "youtubepot-bgutilscript": {"server_home": "/root/bgutil-ytdlp-pot-provider/server"},
+                },
             }
 
             if video:
@@ -982,8 +950,8 @@ class YouTube:
                     continue
 
             return tracks
-        except KeyError:
-            raise Exception("Failed to parse playlist. YouTube may have changed their structure.")
+        except KeyError as e:
+            raise Exception(f"Failed to parse playlist. YouTube may have changed their structure.")
         except Exception as e:
             logger.error(f"Playlist extraction error: {e}")
             raise
@@ -1015,7 +983,12 @@ class YouTube:
                 "socket_timeout": 20,
                 "extractor_retries": 5,
                 "sleep_interval_requests": 1,
-                **self._ytdlp_extractor_args(),
+                "extractor_args": {
+                    "youtube": {
+                        "player_client": ["mweb", "web", "tv", "android"],
+                    },
+                    "youtubepot-bgutilscript": {"server_home": "/root/bgutil-ytdlp-pot-provider/server"},
+                },
             }
 
             def _extract_url():
@@ -1048,9 +1021,13 @@ class YouTube:
                 return None
 
         # ------------------------------------------------------------
-        # APIs FIRST (primary -> fallback)
+        # ALWAYS ENTER API HANDLER
         # ------------------------------------------------------------
-        logger.info(f"🎯 [PRIORITY 1] Trying API download for {video_id}")
+
+        logger.info(
+            f"🎯 [PRIORITY 1] Trying API "
+            f"download for {video_id}"
+        )
 
         result = await self.download_via_api(
             self.base + video_id,
@@ -1058,16 +1035,26 @@ class YouTube:
         )
 
         if result:
-            logger.info(f"✅ [SUCCESS] Downloaded via API: {video_id}")
+            logger.info(
+                f"✅ [SUCCESS] Downloaded "
+                f"via API: {video_id}"
+            )
             return result
 
-        logger.warning(f"⚠️ [ALL APIs FAILED] {video_id}, trying cookies fallback...")
+        logger.warning(
+            f"⚠️ [ALL APIs FAILED] {video_id}, "
+            f"trying cookies fallback..."
+        )
 
-        # ------------------------------------------------------------
+        # ============================================================
         # COOKIES FALLBACK
-        # ------------------------------------------------------------
+        # ============================================================
+
         if self.enable_cookies_fallback:
-            logger.info(f"🍪 [PRIORITY 3] Trying cookies download for {video_id}")
+            logger.info(
+                f"🍪 [PRIORITY 3] Trying cookies "
+                f"download for {video_id}"
+            )
 
             result = await self.download_via_cookies(
                 video_id,
@@ -1075,14 +1062,24 @@ class YouTube:
             )
 
             if result:
-                logger.info(f"✅ [SUCCESS] Downloaded via cookies: {video_id}")
+                logger.info(
+                    f"✅ [SUCCESS] Downloaded "
+                    f"via cookies: {video_id}"
+                )
                 return result
 
-            logger.error(f"❌ [COOKIES FAILED] Could not download {video_id}")
+            logger.error(
+                f"❌ [COOKIES FAILED] "
+                f"Could not download {video_id}"
+            )
 
-        # ------------------------------------------------------------
+        # ============================================================
         # EVERYTHING FAILED
-        # ------------------------------------------------------------
-        logger.error(f"❌ [FAILED] All download methods failed for {video_id}")
+        # ============================================================
+
+        logger.error(
+            f"❌ [FAILED] All download methods "
+            f"failed for {video_id}"
+        )
 
         return None
