@@ -23,12 +23,25 @@ from pyrogram.types import Message
 from Elevenyts import app
 
 # Cute animal / flower emoji only — cycled through for each tagged member.
+# Written as \U escapes (plain ASCII text) so copy/paste can't corrupt them.
 TAG_EMOJIS = [
-    "🌸", "🌷", "🌹", "🌺", "🌻", "🌼", "💐",
-    "🌱", "🌿", "🍃", "🐼", "🐰", "🐇", "🦋",
-    "🐥", "🐤", "🦚", "🦢", "🐨",,"⚘","🐁",
-"🐣","🐤","🐥","🦭","🐬","💮","🌾","☘","🍁",
-"🍂","🐧","🐨","🐹","🐭","🦨"
+    "\U0001F338",  # cherry blossom
+    "\U0001F337",  # tulip
+    "\U0001F339",  # rose
+    "\U0001F33A",  # hibiscus
+    "\U0001F33B",  # sunflower
+    "\U0001F33C",  # blossom
+    "\U0001F490",  # bouquet
+    "\U0001F331",  # seedling
+    "\U0001F343",  # leaf
+    "\U0001F43C",  # panda
+    "\U0001F430",  # rabbit face
+    "\U0001F407",  # rabbit
+    "\U0001F98B",  # butterfly
+    "\U0001F424",  # baby chick
+    "\U0001F425",  # front-facing chick
+    "\U0001F99A",  # peacock
+    "\U0001F428",  # koala
 ]
 
 # How many mentions to put in a single message before starting a new one,
@@ -59,14 +72,14 @@ async def tagall_command(_, m: Message) -> None:
 
     if not await _is_group_admin(m):
         return await m.reply_text(
-            "❌ Only group admins can use this command."
+            "\u274c Only group admins can use this command."
         )
 
     custom_text = ""
     if len(m.command) > 1:
         custom_text = m.text.split(None, 1)[1]
 
-    await m.reply_text("🌸 Tagging everyone, please wait...")
+    await m.reply_text("Tagging everyone, please wait...")
 
     mentions = []
     emoji_index = 0
@@ -82,10 +95,10 @@ async def tagall_command(_, m: Message) -> None:
 
             mentions.append(f'<a href="tg://user?id={user.id}">{emoji}</a>')
     except Exception as e:
-        return await m.reply_text(f"❌ Could not fetch member list: {e}")
+        return await m.reply_text(f"Could not fetch member list: {e}")
 
     if not mentions:
-        return await m.reply_text("❌ No members found to tag.")
+        return await m.reply_text("No members found to tag.")
 
     for i in range(0, len(mentions), MENTIONS_PER_MESSAGE):
         chunk = mentions[i:i + MENTIONS_PER_MESSAGE]
