@@ -44,9 +44,10 @@ TAG_EMOJIS = [
     "\U0001F428",  # koala
 ]
 
-# How many mentions to put in a single message before starting a new one,
-# to stay well under Telegram's message-length limit.
-MENTIONS_PER_MESSAGE = 25
+# How many mentions to put in each message before starting a new one —
+# this keeps groups of members tagged separately, message after message,
+# instead of everyone crammed into a single message.
+MENTIONS_PER_MESSAGE = 5
 
 
 async def _is_group_admin(message: Message) -> bool:
@@ -108,7 +109,7 @@ async def tagall_command(_, m: Message) -> None:
 
         while True:
             try:
-                await m.reply_text(text, disable_web_page_preview=True)
+                await m.reply_text(text)
                 break
             except FloodWait as e:
                 await asyncio.sleep(e.value)
