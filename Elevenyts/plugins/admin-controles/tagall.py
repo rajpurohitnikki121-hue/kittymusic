@@ -66,7 +66,9 @@ async def _is_group_admin(message: Message) -> bool:
 )
 async def tagall_command(_, m: Message) -> None:
     """Tag every member of the group, admin-only. Each mention is shown
-    as a cute emoji you can tap to open that member's profile."""
+    as a cute emoji you can tap to open that member's profile. The
+    custom text (if given) repeats on every batch message, followed by
+    a "Tagged: X-Y" range, and a final summary once everyone is done."""
 
     if not m.from_user:
         return
@@ -101,11 +103,19 @@ async def tagall_command(_, m: Message) -> None:
     if not mentions:
         return await m.reply_text("No members found to tag.")
 
-    for i in range(0, len(mentions), MENTIONS_PER_MESSAGE):
+    total = len(mentions)
+
+    for i in range(0, total, MENTIONS_PER_MESSAGE):
         chunk = mentions[i:i + MENTIONS_PER_MESSAGE]
-        text = " ".join(chunk)
-        if custom_text and i == 0:
-            text = f"{custom_text}\n\n{text}"
+        start = i + 1
+        end = i + len(chunk)
+
+        parts = []
+        if custom_text:
+            parts.append(custom_text)
+        parts.append(" ".join(chunk))
+        parts.append(f"<b>Tagged: {start}-{end}</b>")
+        text = "\n\n".join(parts)
 
         while True:
             try:
@@ -115,3 +125,7 @@ async def tagall_command(_, m: Message) -> None:
                 await asyncio.sleep(e.value)
 
         await asyncio.sleep(1)
+
+    await m.reply_text(
+        f"\u2705 Tagging complete!\n<b>Total tagged:</b> {total}"
+    )
