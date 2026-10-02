@@ -45,8 +45,8 @@ class Config:
         self.SESSION3: str = getenv("STRING_SESSION3", "")
 
         # Support Links
-        self.SUPPORT_CHANNEL: str = getenv("SUPPORT_CHANNEL", "https://telegram.me/nighttblooms")
-        self.SUPPORT_CHAT: str = getenv("SUPPORT_CHAT", "https://telegram.me/always_youuh")
+        self.SUPPORT_CHANNEL: str = getenv("SUPPORT_CHANNEL", "https://t.me/nightbloomsgc")
+        self.SUPPORT_CHAT: str = getenv("SUPPORT_CHAT", "https://t.me/pixiiela")
 
         # Excluded Chats
         self.EXCLUDED_CHATS: List[int] = self._parse_excluded_chats()
