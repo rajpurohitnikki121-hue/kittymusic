@@ -13,22 +13,20 @@
 # Unauthorized copying, modification, or redistribution
 # of this source code without permission is prohibited.
 # ==========================================================
-from pyrogram.types import ChatJoinRequest, InlineKeyboardButton, InlineKeyboardMarkup
+
+from pyrogram.types import (
+    ChatJoinRequest,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+)
 
 from Elevenyts import app
 
 
 @app.on_chat_join_request()
 async def handle_join_request(_, request: ChatJoinRequest) -> None:
-    """When someone requests to join a group, DM them a Verify button
-    that opens the bot and sends /start. Requires the bot to be a group
-    admin with the "Invite Users" permission — Telegram then allows the
-    bot to message the requester directly even if they've never started
-    the bot before (Bot API 5.5+).
+    """Send a verification message when a user sends a join request."""
 
-    The bot does NOT approve or decline the join request itself — that
-    stays entirely up to the group's own admins/settings. This only
-    nudges the user to start the bot."""
     user = request.from_user
     if not user:
         return
@@ -36,15 +34,35 @@ async def handle_join_request(_, request: ChatJoinRequest) -> None:
     deep_link = f"https://t.me/{app.username}?start=verify"
 
     markup = InlineKeyboardMarkup(
-        [[InlineKeyboardButton(text="Verify", url=deep_link)]]
+        [
+            [
+                InlineKeyboardButton(
+                    text="🔐 𝐕𝐄𝐑𝐈𝐅𝐘 𝐌𝐘𝐒𝐄𝐋𝐅",
+                    url=deep_link,
+                )
+            ]
+        ]
+    )
+
+    group_name = request.chat.title or "This Group"
+
+    text = (
+        "🔐 𝐕𝐄𝐑𝐈𝐅𝐈𝐂𝐀𝐓𝐈𝐎𝐍\n\n"
+        f"📌 𝐆𝐫𝐨𝐮𝐩: {group_name}\n\n"
+        "Your request has been sent successfully. ♡\n\n"
+        "⚠️ 𝐏𝐥𝐞𝐚𝐬𝐞 𝐯𝐞𝐫𝐢𝐟𝐲 𝐲𝐨𝐮𝐫𝐬𝐞𝐥𝐟 "
+        "𝐛𝐞𝐟𝐨𝐫𝐞 𝐚𝐝𝐦𝐢𝐧 𝐚𝐩𝐩𝐫𝐨𝐯𝐚𝐥.\n\n"
+        "✅ 𝐕𝐞𝐫𝐢𝐟𝐲 𝐘𝐨𝐮𝐫𝐬𝐞𝐥𝐟"
     )
 
     try:
         target_chat_id = getattr(request, "user_chat_id", None) or user.id
+
         await app.send_message(
             target_chat_id,
-            "<u>Click on the button below to verify yourself.</u>",
+            text,
             reply_markup=markup,
         )
+
     except Exception:
         pass
