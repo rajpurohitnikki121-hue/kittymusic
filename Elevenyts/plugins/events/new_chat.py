@@ -13,6 +13,8 @@
 # Unauthorized copying, modification, or redistribution
 # of this source code without permission is prohibited.
 # ==========================================================
+import html
+
 from pyrogram import filters, types
 from pyrogram.errors import ChatAdminRequired, ChannelPrivate
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
@@ -20,6 +22,11 @@ from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from Elevenyts import app, config
 
 GROUP_IMG = "https://files.catbox.moe/4qgc5d.jpg"
+
+
+def _bot_name() -> str:
+    """This bot's own name, safe for HTML messages."""
+    return html.escape(app.name or "Music Bot")
 
 
 def _group_welcome_markup():
@@ -74,7 +81,7 @@ async def new_chat_member(_, message: types.Message):
                 chat_link = "❌ ᴜɴᴀʙʟᴇ ᴛᴏ ɢᴇᴛ ʟɪɴᴋ"
 
             # Logger notification (internal — keeps existing format)
-            logger_text = f"""<blockquote>🟢 <b>𝐈𝐒𝐇𝐐 ✘ 𝐌𝐮𝐬𝐢𝐜 ᴀᴅᴅᴇᴅ ɪɴ ᴀ ɴᴇᴡ ɢʀᴏᴜᴘ</b></blockquote>
+            logger_text = f"""<blockquote>🟢 <b>{_bot_name()} ᴀᴅᴅᴇᴅ ɪɴ ᴀ ɴᴇᴡ ɢʀᴏᴜᴘ</b></blockquote>
 
 <blockquote>
 🔖 <b>ᴄʜᴀᴛ ɴᴀᴍᴇ:</b> {chat_name}
@@ -86,10 +93,10 @@ async def new_chat_member(_, message: types.Message):
 </blockquote>
 """
 
-            # Group welcome message (public — Ishq branding)
+            # Group welcome message (public — uses this bot's own name)
             group_text = (
                 f"♡ 𝐓𝐡𝐚𝐧𝐤 𝐘𝐨𝐮 𝐅𝐨𝐫 𝐀𝐝𝐝𝐢𝐧𝐠 𝐌𝐞 ♡\n\n"
-                f"🎵 𐙚 𝐈𝐒𝐇𝐐 ✘ 𝐌𝐮𝐬𝐢𝐜 ᥫ᭡\n\n"
+                f"🎵 𐙚 {_bot_name()} ᥫ᭡\n\n"
                 f"🥀 𝐑𝐞𝐚𝐝𝐲 𝐓𝐨 𝐏𝐥𝐚𝐲 𝐘𝐨𝐮𝐫 𝐅𝐚𝐯𝐨𝐮𝐫𝐢𝐭𝐞 𝐌𝐮𝐬𝐢𝐜.\n\n"
                 f"𝐓𝐡𝐚𝐧𝐤 𝐲𝐨𝐮 𝐟𝐨𝐫 𝐚𝐝𝐝𝐢𝐧𝐠 𝐦𝐞 𝐭𝐨 {chat_name} ♡"
             )
@@ -151,7 +158,7 @@ async def left_chat_member(_, message: types.Message):
         except Exception:
             chat_link = "❌ ᴜɴᴀʙʟᴇ ᴛᴏ ɢᴇᴛ ʟɪɴᴋ"
 
-        text = f"""<blockquote>🔴 <b>𝐈𝐒𝐇𝐐 ✘ 𝐌𝐮𝐬𝐢𝐜 ʀᴇᴍᴏᴠᴇᴅ ꜰʀᴏᴍ ᴀ ɢʀᴏᴜᴘ</b></blockquote>
+        text = f"""<blockquote>🔴 <b>{_bot_name()} ʀᴇᴍᴏᴠᴇᴅ ꜰʀᴏᴍ ᴀ ɢʀᴏᴜᴘ</b></blockquote>
 
 <blockquote>
 🔖 <b>ᴄʜᴀᴛ ɴᴀᴍᴇ:</b> {chat_name}
