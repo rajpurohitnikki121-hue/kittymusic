@@ -285,6 +285,19 @@ class Inline:
     ) -> types.InlineKeyboardMarkup:
         # Layout + bold serif font + blue buttons, like the reference bot.
         P = ButtonStyle.PRIMARY
+        # Telegram rejects tg://user?id= links on buttons unless the bot has
+        # already met that user (the whole /start then fails). So the Owner
+        # button is shown only when a normal https://t.me/<username> link
+        # is known.
+        owner_url = getattr(app, "owner_url", "") or ""
+        second_row = [
+            self._start_btn("𝐂𝐡𝐚𝐧𝐧𝐞𝐥", "✦", "channel",
+                            url=config.UPDATE_CHANNEL, style=P),
+        ]
+        if owner_url.startswith("https://"):
+            second_row.append(
+                self._start_btn("𝐎𝐰𝐧𝐞𝐫", "♛", "owner",
+                                url=owner_url, style=P))
         rows = [
             [
                 self._start_btn("𝐂𝐨𝐦𝐦𝐚𝐧𝐝𝐬", "♫", "commands",
@@ -292,12 +305,7 @@ class Inline:
                 self._start_btn("𝐒𝐮𝐩𝐩𝐨𝐫𝐭", "♡", "support",
                                 url=config.SUPPORT_CHANNEL, style=P),
             ],
-            [
-                self._start_btn("𝐂𝐡𝐚𝐧𝐧𝐞𝐥", "✦", "channel",
-                                url=config.UPDATE_CHANNEL, style=P),
-                self._start_btn("𝐎𝐰𝐧𝐞𝐫", "♛", "owner",
-                                url=app.owner_url, style=P),
-            ],
+            second_row,
             [
                 self._start_btn("𝐀𝐝𝐝 𝐌𝐞", "⌂", "addme",
                                 url=f"https://t.me/{app.username}?startgroup=true",
