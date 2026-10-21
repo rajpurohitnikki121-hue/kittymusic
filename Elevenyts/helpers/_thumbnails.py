@@ -24,7 +24,7 @@ from PIL import (
     ImageFont
 )
 
-from Elevenyts import config
+from Elevenyts import app, config
 from Elevenyts.helpers import Track
 
 
@@ -133,18 +133,20 @@ class Thumbnail:
                 ).convert("RGBA")
 
             draw = ImageDraw.Draw(bg)
+            # Bot's own name (falls back to BRAND_TEXT if not known yet)
+            brand_text = getattr(app, "name", None) or BRAND_TEXT
 
             # subtle drop shadow + white text for the bot name
             # (no background box/strip, just a soft text shadow)
             draw.text(
                 (BRAND_X + 2, BRAND_Y + 2),
-                BRAND_TEXT,
+                brand_text,
                 fill=(0, 0, 0, 160),
                 font=self.brand_font
             )
             draw.text(
                 (BRAND_X, BRAND_Y),
-                BRAND_TEXT,
+                brand_text,
                 fill=(255, 255, 255, 255),
                 font=self.brand_font
             )
