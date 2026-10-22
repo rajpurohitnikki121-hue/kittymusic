@@ -19,6 +19,9 @@ from pyrogram import enums, errors, filters, types
 from Elevenyts import app, config, db, lang
 from Elevenyts.helpers import buttons, utils
 
+# Hosted backup welcome image (used if the main image can't be sent)
+BACKUP_START_IMG = "https://files.catbox.moe/vnl0a4.jpg"
+
 
 @app.on_message(filters.command(["help"]) & filters.private & ~app.bl_users)
 @lang.language()
@@ -42,7 +45,6 @@ async def _help(_, m: types.Message):
         await m.reply_text(
             text=m.lang["help_menu"],
             reply_markup=buttons.help_markup(m.lang),
-            quote=True,
         )
 
 
@@ -87,35 +89,27 @@ async def start(_, message: types.Message):
     )
 
     key = buttons.start_key(message.lang, private)
-    try:
-        await message.reply_photo(
-            photo=config.START_IMG,
-            caption=_text,
-            reply_markup=key,
-        
-        )
-    except errors.ChatSendPhotosForbidden:
-        # If photos are not allowed, send text only
-        await message.reply_text(
-            text=_text,
-            reply_markup=key,
-            quote=not private,
-        )
-    except Exception:
-        # START_IMG is unusable (dead link / not an image): retry with the
-        # built-in default image, then plain text, so /start never fails.
+    # Try the configured image, then the hosted backup image, then plain
+    # text, so /start always answers even if an image can't be processed.
+    sent = False
+    for photo in (config.START_IMG, BACKUP_START_IMG):
         try:
             await message.reply_photo(
-                photo=config.DEFAULT_START_IMG,
+                photo=photo,
                 caption=_text,
                 reply_markup=key,
             )
+            sent = True
+            break
+        except errors.ChatSendPhotosForbidden:
+            break
         except Exception:
-            await message.reply_text(
-                text=_text,
-                reply_markup=key,
-                quote=not private,
-            )
+            continue
+    if not sent:
+        await message.reply_text(
+            text=_text,
+            reply_markup=key,
+        )
 
     # For private chats, add user to database if new
     if private:
