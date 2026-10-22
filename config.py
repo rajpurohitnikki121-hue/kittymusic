@@ -14,7 +14,6 @@
 # of this source code without permission is prohibited.
 # ==========================================================
 
-import os
 import re
 from os import getenv
 from typing import List
@@ -91,14 +90,9 @@ class Config:
         # Images
         self.DEFAULT_THUMB: str = getenv("DEFAULT_THUMB", "https://litter.catbox.moe/pi6brrhl2f82zrwv.jpg")
         self.PING_IMG: str = getenv("PING_IMG", "https://files.catbox.moe/fjbj4g.jpg")
-        # Built-in Ishq Music welcome art (assets/ishq_start.jpg next to this
-        # file). If that file is missing, the old hosted image is used.
-        _local_start = os.path.join(
-            os.path.dirname(os.path.abspath(__file__)), "assets", "ishq_start.jpg")
-        self.DEFAULT_START_IMG: str = (
-            _local_start if os.path.isfile(_local_start)
-            else "https://files.catbox.moe/vnl0a4.jpg"
-        )
+        # Default welcome image (direct image link). A START_IMG env var
+        # overrides it per bot.
+        self.DEFAULT_START_IMG: str = "https://image-link.edgeone.app/1792668110748-s09z2w.jpg"
         self.START_IMG: str = self._clean_image(
             getenv("START_IMG"), self.DEFAULT_START_IMG)
         self.RADIO_IMG: str = getenv("RADIO_IMG", "https://litter.catbox.moe/pi6brrhl2f82zrwv.jpg")
