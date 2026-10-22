@@ -110,6 +110,14 @@ async def new_chat_member(_, message: types.Message):
                 )
             except Exception as e:
                 print(f"Failed to send new chat notification: {e}")
+                # Photo failed (bad image link): send as plain text instead
+                try:
+                    await app.send_message(
+                        chat_id=config.LOGGER_ID,
+                        text=logger_text
+                    )
+                except Exception as e2:
+                    print(f"Failed to send new chat text notification: {e2}")
 
             # Send group welcome message with buttons
             try:
@@ -176,6 +184,11 @@ async def left_chat_member(_, message: types.Message):
             )
         except Exception as e:
             print(f"Failed to send left chat notification: {e}")
+            # Photo failed (bad image link): send as plain text instead
+            try:
+                await app.send_message(chat_id=config.LOGGER_ID, text=text)
+            except Exception as e2:
+                print(f"Failed to send left chat text notification: {e2}")
 
 
 # ==========================================
