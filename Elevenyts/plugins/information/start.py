@@ -14,13 +14,55 @@
 # of this source code without permission is prohibited.
 # ==========================================================
 
+import logging
+
 from pyrogram import enums, errors, filters, types
 
 from Elevenyts import app, config, db, lang
 from Elevenyts.helpers import buttons, utils
 
+logger = logging.getLogger(__name__)
+
 # Hosted backup welcome image (used if the main image can't be sent)
 BACKUP_START_IMG = "https://files.catbox.moe/vnl0a4.jpg"
+
+
+async def _photo_reply(message, url: str, caption: str, key):
+    """Send a photo from a link. If Telegram can't fetch the link itself
+    (blocked host, bad headers), the bot downloads the image and uploads
+    it directly. Returns True when a photo was sent."""
+    try:
+        await message.reply_photo(photo=url, caption=caption, reply_markup=key)
+        return True
+    except errors.ChatSendPhotosForbidden:
+        raise
+    except Exception as e:
+        logger.warning(f"Photo by link failed ({url}): {e}")
+    if not str(url).lower().startswith("http"):
+        return False
+    try:
+        import io
+        import aiohttp
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                url,
+                headers={"User-Agent": "Mozilla/5.0"},
+                timeout=aiohttp.ClientTimeout(total=20),
+            ) as resp:
+                if resp.status != 200:
+                    raise RuntimeError(f"HTTP {resp.status}")
+                data = await resp.read()
+        if len(data) < 1000 or len(data) > 9_000_000:
+            raise RuntimeError(f"bad image size {len(data)}")
+        bio = io.BytesIO(data)
+        bio.name = "start.jpg"
+        await message.reply_photo(photo=bio, caption=caption, reply_markup=key)
+        return True
+    except errors.ChatSendPhotosForbidden:
+        raise
+    except Exception as e:
+        logger.warning(f"Photo upload failed ({url}): {e}")
+        return False
 
 
 @app.on_message(filters.command(["help"]) & filters.private & ~app.bl_users)
@@ -34,12 +76,16 @@ async def _help(_, m: types.Message):
         pass
     
     try:
-        await m.reply_photo(
-            photo=config.START_IMG,  # Use same image as start command
-            caption=m.lang["help_menu"],
-            reply_markup=buttons.help_markup(m.lang),
-            quote=True,
-        )
+        _ok = False
+        for _p in (config.START_IMG, BACKUP_START_IMG):
+            if await _photo_reply(
+                m, _p, m.lang["help_menu"], buttons.help_markup(m.lang)
+            ):
+                _ok = True
+                break
+        if _ok:
+            return
+        raise RuntimeError("no photo sent")
     except Exception:
         # Fallback to text if photo fails
         await m.reply_text(
@@ -94,13 +140,9 @@ async def start(_, message: types.Message):
     sent = False
     for photo in (config.START_IMG, BACKUP_START_IMG):
         try:
-            await message.reply_photo(
-                photo=photo,
-                caption=_text,
-                reply_markup=key,
-            )
-            sent = True
-            break
+            if await _photo_reply(message, photo, _text, key):
+                sent = True
+                break
         except errors.ChatSendPhotosForbidden:
             break
         except Exception:
