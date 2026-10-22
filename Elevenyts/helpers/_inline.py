@@ -58,7 +58,8 @@ S_DOT = "\u00B7"      # ·
 S_BACK = "\u00AB"     # «
 
 # Player button labels (exact Ishq Music style)
-BTN_AUTOPLAY = "\u2727 \U0001D400\u200C\u03C5\u1D1B\u03C3\u1D18\u029F\u1D00\u028F \u2727"
+BTN_AUTOPLAY_ON = "\U0001D400\u200C\u03C5\u1D1B\u03C3\u1D18\u029F\u1D00\u028F \U0001D40E\u0274"
+BTN_AUTOPLAY_OFF = "\U0001D400\u200C\u03C5\u1D1B\u03C3\u1D18\u029F\u1D00\u028F \U0001D40E\ua730\ua730"
 BTN_CLOSE = "\u00D7 \U0001D402\u200C\u029F\u03C3s\u1D07"
 
 
@@ -86,10 +87,10 @@ class Inline:
         return self.ikm([[self.ikb(text=text, callback_data=f"cancel_dl", style=ButtonStyle.PRIMARY)]])
 
     def _autoplay_button(self, chat_id: int) -> types.InlineKeyboardButton:
-        # Fixed label. ON/OFF is shown by colour: green = ON, blue = OFF.
+        # Label shows ON/OFF in words; colour: green = ON, blue = OFF.
         on = autoplay.is_enabled(chat_id)
         return self.ikb(
-            text=BTN_AUTOPLAY,
+            text=BTN_AUTOPLAY_ON if on else BTN_AUTOPLAY_OFF,
             callback_data=f"controls autoplay {chat_id}",
             style=ButtonStyle.SUCCESS if on else ButtonStyle.PRIMARY,
         )
@@ -322,4 +323,4 @@ class Inline:
                     self.ikb(text=f"{S_PLAY} {_f('Open In YouTube')}", url=link),
                 ],
             ]
-)
+        )
