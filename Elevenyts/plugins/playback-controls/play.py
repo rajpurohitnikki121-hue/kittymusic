@@ -22,8 +22,21 @@ from Elevenyts.helpers import buttons, utils
 from Elevenyts.helpers._play import checkUB
 import asyncio
 import logging
+import time
 
 logger = logging.getLogger(__name__)
+
+# chat_id -> time when the FIRST song of an idle chat began starting.
+# While that song is still downloading / joining the voice chat, the call is
+# not registered yet, so songs requested at the same moment must wait in the
+# queue instead of each one starting (and replacing) the previous one.
+_starting: dict = {}
+_STARTING_TTL = 120  # seconds; safety so a failed start can never block forever
+
+
+def _is_starting(chat_id: int) -> bool:
+    t = _starting.get(chat_id)
+    return bool(t) and (time.time() - t) < _STARTING_TTL
 
 
 async def safe_edit(message, text, **kwargs):
@@ -295,7 +308,7 @@ async def play_hndlr(
     else:
         position = queue.add(chat_id, file)  # Returns 0-based index
 
-        if await db.get_call(chat_id):
+        if await db.get_call(chat_id) or (position > 0 and _is_starting(chat_id)):
             # When call is active, position 0 is currently playing
             # So actual waiting position is: position (e.g., 1st waiting = index 1)
             # Display as 1-based for users: index 1 → "1st in queue"
@@ -333,6 +346,11 @@ async def play_hndlr(
             
             return
 
+        if position == 0:
+            # We are the first song: later requests wait in the queue
+            # until this one has started playing.
+            _starting[chat_id] = time.time()
+
     if not file.file_path:
         file.file_path = await yt.download(
             file.id,
@@ -357,6 +375,7 @@ async def play_hndlr(
             media=file, 
             message_chat_id=message_chat_id if chat_id != message_chat_id else None
         )
+        _starting.pop(chat_id, None)
         # React with emoji on successful play
         try:
             emoji = m.lang["play_emoji"]
@@ -365,6 +384,7 @@ async def play_hndlr(
             # If reaction fails, continue anyway (not critical)
             pass
     except Exception as e:
+        _starting.pop(chat_id, None)
         error_msg = str(e)
         if "bot" in error_msg.lower() or "sign in" in error_msg.lower():
             await safe_edit(
