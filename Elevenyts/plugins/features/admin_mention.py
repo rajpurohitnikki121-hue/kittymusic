@@ -27,6 +27,10 @@ logger = logging.getLogger(__name__)
 # like "@administrator" or "x@admin.com" do not call the admins.
 TRIGGER_PATTERN = re.compile(r"(?i)(^|\s)(\.|@|\/)admins?\b")
 
+# Invisible character: a tag made of it notifies the admin, but the message
+# stays short and clean (the same way Rose reports to admins).
+_HIDDEN = "⁣"
+
 
 @app.on_message(
     filters.group & filters.regex(r"(?i)(^|\s)(\.|@|\/)admins?\b"),
@@ -34,14 +38,11 @@ TRIGGER_PATTERN = re.compile(r"(?i)(^|\s)(\.|@|\/)admins?\b")
 )
 async def mention_admins(_, message: types.Message):
     """
-    Mention all group admins when someone types @admin, .admin, or /admin
+    Notify all group admins when someone types @admin, .admin, or /admin.
+    The bot replies "Reported to admins" to the message and quietly tags
+    every human admin, so each of them gets a notification.
     """
     try:
-        # Extract the message without the trigger
-        message_text = message.text or message.caption or ""
-        cleaned_text = html.escape(
-            TRIGGER_PATTERN.sub(" ", message_text).strip())
-
         # Get user info (handle anonymous admins)
         sender = message.from_user
         if sender:
@@ -52,19 +53,8 @@ async def mention_admins(_, message: types.Message):
             # Anonymous admin or channel
             user_display = "ᴀɴᴏɴʏᴍᴏᴜꜱ ᴀᴅᴍɪɴ"
 
-        # Build formatted reply message
-        if cleaned_text:
-            reply_msg = (
-                f"<blockquote><b><i>\"{cleaned_text}\"</i></b>\n"
-                f"ʀᴇᴘᴏʀᴛᴇᴅ ʙʏ: {user_display} 🔔</blockquote>\n\n"
-            )
-        else:
-            reply_msg = (
-                f"<blockquote>ʀᴇᴘᴏʀᴛᴇᴅ ʙʏ: {user_display} 🔔</blockquote>\n\n"
-            )
-
-        # Get all administrators
-        mentions = []
+        # Collect all human administrators
+        ids = []
         excluded = [u.lower() for u in config.EXCLUDED_USERNAMES]
         try:
             async for admin in app.get_chat_members(
@@ -79,23 +69,15 @@ async def mention_admins(_, message: types.Message):
                 if user.is_bot or user.is_deleted:
                     continue
 
-                # Skip admins who have "Remain Anonymous" enabled
-                if getattr(admin, "privileges", None):
-                    if getattr(admin.privileges, "is_anonymous", False):
-                        continue
+                # Skip the person who reported
+                if sender and user.id == sender.id:
+                    continue
 
                 # Skip usernames in the excluded list
                 if user.username and user.username.lower() in excluded:
                     continue
 
-                # Add mention
-                if user.username:
-                    mentions.append(f"@{user.username}")
-                else:
-                    # Use HTML link format to mention users without username
-                    mentions.append(
-                        f"<a href='tg://user?id={user.id}'>"
-                        f"{html.escape(user.first_name or 'Admin')}</a>")
+                ids.append(user.id)
         except Exception as e:
             logger.warning(f"@admin: could not fetch admins: {e}")
             await message.reply_text(
@@ -103,19 +85,31 @@ async def mention_admins(_, message: types.Message):
             )
             return
 
-        if mentions:
-            reply_msg += ", ".join(mentions)
-        else:
-            reply_msg += "<i>No visible human admins found to mention.</i>"
-
-        # Send the reply
-        try:
-            await message.reply_text(reply_msg)
-        except Exception as e:
-            logger.warning(f"@admin: failed to send admin notification: {e}")
+        if not ids:
             await message.reply_text(
-                "<blockquote>❌ Failed to send admin notification.</blockquote>"
+                "<blockquote><i>No visible human admins found to mention.</i></blockquote>"
             )
+            return
+
+        header = (
+            f"<blockquote>ʀᴇᴘᴏʀᴛᴇᴅ ᴛᴏ ᴀᴅᴍɪɴꜱ 🔔\n"
+            f"ʀᴇᴘᴏʀᴛᴇᴅ ʙʏ: {user_display}</blockquote>"
+        )
+
+        # 5 admins per message so every tag really notifies
+        for i in range(0, len(ids), 5):
+            chunk = ids[i:i + 5]
+            tags = "".join(
+                f"<a href='tg://user?id={uid}'>{_HIDDEN}</a>" for uid in chunk
+            )
+            try:
+                await message.reply_text(header + tags)
+            except Exception as e:
+                logger.warning(f"@admin: failed to send admin notification: {e}")
+                await message.reply_text(
+                    "<blockquote>❌ Failed to send admin notification.</blockquote>"
+                )
+                break
     except Exception as e:
         logger.warning(f"@admin: error while processing admin mention: {e}")
         # Catch all exceptions to prevent bot crashes
