@@ -96,20 +96,17 @@ async def mention_admins(_, message: types.Message):
             f"ʀᴇᴘᴏʀᴛᴇᴅ ʙʏ: {user_display}</blockquote>"
         )
 
-        # 5 admins per message so every tag really notifies
-        for i in range(0, len(ids), 5):
-            chunk = ids[i:i + 5]
-            tags = "".join(
-                f"<a href='tg://user?id={uid}'>{_HIDDEN}</a>" for uid in chunk
+        # One single message for all admins (up to 50 tags)
+        tags = "".join(
+            f"<a href='tg://user?id={uid}'>{_HIDDEN}</a>" for uid in ids[:50]
+        )
+        try:
+            await message.reply_text(header + tags)
+        except Exception as e:
+            logger.warning(f"@admin: failed to send admin notification: {e}")
+            await message.reply_text(
+                "<blockquote>❌ Failed to send admin notification.</blockquote>"
             )
-            try:
-                await message.reply_text(header + tags)
-            except Exception as e:
-                logger.warning(f"@admin: failed to send admin notification: {e}")
-                await message.reply_text(
-                    "<blockquote>❌ Failed to send admin notification.</blockquote>"
-                )
-                break
     except Exception as e:
         logger.warning(f"@admin: error while processing admin mention: {e}")
         # Catch all exceptions to prevent bot crashes
