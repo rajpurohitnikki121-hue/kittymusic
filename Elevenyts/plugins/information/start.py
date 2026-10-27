@@ -173,6 +173,11 @@ async def start(_, message: types.Message):
     ):
         app.owner_url = f"https://t.me/{message.from_user.username}"
 
+    logger.info(
+        f"/start by {message.from_user.id} (username: {message.from_user.username}); "
+        f"OWNER_ID={config.OWNER_ID}; owner_url={getattr(app, 'owner_url', None)}"
+    )
+
     key = buttons.start_key(message.lang, private)
     # Try the configured image, then the hosted backup image, then plain
     # text, so /start always answers even if an image can't be processed.
