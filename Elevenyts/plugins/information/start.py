@@ -27,17 +27,46 @@ logger = logging.getLogger(__name__)
 BACKUP_START_IMG = "https://files.catbox.moe/vnl0a4.jpg"
 
 
+# url -> Telegram file_id of the already-sent image (instant re-send), and
+# links Telegram could not fetch itself (skip straight to upload next time).
+_photo_ids: dict = {}
+_link_bad: set = set()
+
+
 async def _photo_reply(message, url: str, caption: str, key):
-    """Send a photo from a link. If Telegram can't fetch the link itself
-    (blocked host, bad headers), the bot downloads the image and uploads
-    it directly. Returns True when a photo was sent."""
-    try:
-        await message.reply_photo(photo=url, caption=caption, reply_markup=key)
-        return True
-    except errors.ChatSendPhotosForbidden:
-        raise
-    except Exception as e:
-        logger.warning(f"Photo by link failed ({url}): {e}")
+    """Send a photo from a link, as fast as possible.
+    1) reuse the Telegram file_id from an earlier send (instant);
+    2) send the link; 3) if Telegram can't fetch it, download the image and
+    upload it directly. Returns True when a photo was sent."""
+    def _remember(sent):
+        try:
+            _photo_ids[url] = sent.photo.file_id
+        except Exception:
+            pass
+
+    fid = _photo_ids.get(url)
+    if fid:
+        try:
+            await message.reply_photo(photo=fid, caption=caption, reply_markup=key)
+            return True
+        except errors.ChatSendPhotosForbidden:
+            raise
+        except Exception as e:
+            _photo_ids.pop(url, None)
+            logger.warning(f"Cached photo failed ({url}): {e}")
+
+    if url not in _link_bad:
+        try:
+            sent = await message.reply_photo(
+                photo=url, caption=caption, reply_markup=key)
+            _remember(sent)
+            return True
+        except errors.ChatSendPhotosForbidden:
+            raise
+        except Exception as e:
+            _link_bad.add(url)
+            logger.warning(f"Photo by link failed ({url}): {e}")
+
     if not str(url).lower().startswith("http"):
         return False
     try:
@@ -47,7 +76,7 @@ async def _photo_reply(message, url: str, caption: str, key):
             async with session.get(
                 url,
                 headers={"User-Agent": "Mozilla/5.0"},
-                timeout=aiohttp.ClientTimeout(total=20),
+                timeout=aiohttp.ClientTimeout(total=15),
             ) as resp:
                 if resp.status != 200:
                     raise RuntimeError(f"HTTP {resp.status}")
@@ -56,7 +85,9 @@ async def _photo_reply(message, url: str, caption: str, key):
             raise RuntimeError(f"bad image size {len(data)}")
         bio = io.BytesIO(data)
         bio.name = "start.jpg"
-        await message.reply_photo(photo=bio, caption=caption, reply_markup=key)
+        sent = await message.reply_photo(
+            photo=bio, caption=caption, reply_markup=key)
+        _remember(sent)
         return True
     except errors.ChatSendPhotosForbidden:
         raise
@@ -133,6 +164,14 @@ async def start(_, message: types.Message):
         if private
         else message.lang["start_gp"].format(app.name)
     )
+
+    # The owner's own /start tells us the username for the Owner button
+    # (the Owner button is shown once app.owner_url is a t.me link)
+    if (
+        message.from_user.id == config.OWNER_ID
+        and message.from_user.username
+    ):
+        app.owner_url = f"https://t.me/{message.from_user.username}"
 
     key = buttons.start_key(message.lang, private)
     # Try the configured image, then the hosted backup image, then plain
