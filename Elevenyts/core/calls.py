@@ -898,8 +898,9 @@ class TgCall(PyTgCalls):
                             await db.rm_chat(chat_id)
                         return
 
-                # Autoplay session limit: after LIMIT songs, say goodbye and leave.
-                if autoplay.limit_reached(chat_id):
+                # Autoplay session limit: after LIMIT autoplay songs, say goodbye
+                # and leave - but only when no requested/queued song is waiting.
+                if autoplay.limit_reached(chat_id) and queue.get_next(chat_id, check=True) is None:
                     await self._autoplay_limit_leave(chat_id, target_chat)
                     return
 
