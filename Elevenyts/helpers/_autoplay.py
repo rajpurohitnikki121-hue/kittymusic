@@ -23,12 +23,13 @@ free instance spins down), autoplay goes back to OFF for every chat.
 """
 import re
 
-# After this many songs in one voice-chat session (autoplay ON), the bot
-# says goodbye and leaves the voice chat.
+# After this many AUTOPLAY songs in one voice-chat session (autoplay ON), the
+# bot says goodbye and leaves the voice chat. Songs that people request or
+# add to the queue are NOT counted, and they are always played first.
 LIMIT = 20
 
 _enabled: dict = {}       # chat_id -> bool
-_count: dict = {}         # chat_id -> songs played this session
+_count: dict = {}         # chat_id -> AUTOPLAY songs played this session
 _last_counted: dict = {}  # chat_id -> id of the last song that was counted
 _played: dict = {}        # chat_id -> set of video ids already played
 _titles: dict = {}        # chat_id -> set of normalized titles already played
@@ -84,8 +85,8 @@ def set_enabled(chat_id: int, value: bool) -> None:
     was_on = _enabled.get(chat_id, False)
     _enabled[chat_id] = value
     if value and not was_on:
-        # Start counting fresh. If a song is already playing it counts as 1.
-        _count[chat_id] = 1 if chat_id in _last_track else 0
+        # Start counting fresh (only autoplay songs are counted)
+        _count[chat_id] = 0
 
 
 def toggle(chat_id: int) -> bool:
@@ -102,6 +103,10 @@ def note_played(chat_id: int, media) -> None:
     if vid:
         _played.setdefault(chat_id, set()).add(vid)
     _add_title(chat_id, getattr(media, "title", None))
+    # Only songs picked by autoplay count towards the limit; songs that
+    # people requested / queued do not.
+    if getattr(media, "user", None) != "Autoplay":
+        return
     # Repeating the same song (loop / replay) is not counted again.
     if vid is None or _last_counted.get(chat_id) != vid:
         _count[chat_id] = _count.get(chat_id, 0) + 1
