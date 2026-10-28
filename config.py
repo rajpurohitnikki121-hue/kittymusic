@@ -55,6 +55,11 @@ class Config:
         self.UPDATE_CHANNEL: str = self._tg_link(
             getenv("UPDATE_CHANNEL"), "https://t.me/pixiiela")
         self.SUPPORT_CHAT: str = getenv("SUPPORT_CHAT", "https://t.me/pixiiela")
+        # Optional: the owner's Telegram username (name, @name or t.me/name).
+        # When set, the Owner button on /start uses it right away. Empty or
+        # malformed -> "" (the bot then finds the username by itself).
+        self.OWNER_USERNAME: str = self._tg_link(
+            getenv("OWNER_USERNAME"), "")
 
         # Excluded Chats
         self.EXCLUDED_CHATS: List[int] = self._parse_excluded_chats()
