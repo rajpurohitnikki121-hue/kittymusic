@@ -65,7 +65,9 @@ class Bot(pyrogram.Client):
         self.mention: Optional[str] = None
         # Link used by the "Owner" button. Replaced with the owner's
         # @username link at start-up when it can be resolved.
-        self.owner_url: str = f"tg://user?id={self.owner}"
+        self.owner_url: str = (
+            getattr(config, "OWNER_USERNAME", "") or f"tg://user?id={self.owner}"
+        )
 
     async def boot(self) -> None:
         """
@@ -108,9 +110,10 @@ class Bot(pyrogram.Client):
 
         # Owner button link (best effort; the id-based link stays as fallback)
         try:
-            owner_user = await self.get_users(self.owner)
-            if owner_user.username:
-                self.owner_url = f"https://t.me/{owner_user.username}"
+            if not getattr(config, "OWNER_USERNAME", ""):
+                owner_user = await self.get_users(self.owner)
+                if owner_user.username:
+                    self.owner_url = f"https://t.me/{owner_user.username}"
         except Exception as ex:
             logger.debug(f"Could not resolve owner username: {ex}")
 
