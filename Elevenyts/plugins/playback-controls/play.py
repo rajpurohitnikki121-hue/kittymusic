@@ -21,6 +21,7 @@ from Elevenyts import tune, app, config, db, lang, queue, tg, yt
 from Elevenyts.helpers import buttons, utils
 from Elevenyts.helpers._play import checkUB
 import asyncio
+import html
 import logging
 import time
 
@@ -358,6 +359,11 @@ async def play_hndlr(
             video=getattr(file, "video", False),
         )
         if not file.file_path:
+            try:
+                why = yt.fail_reason()
+            except Exception:
+                why = "Download failed."
+            await tune.report_fail(chat_id, file, why)
             await safe_edit(
                 sent,
                 "<blockquote>❌ Failed to download media.\n\n"
@@ -366,6 +372,8 @@ async def play_hndlr(
                 "• Video is region-blocked or private\n"
                 "• Age-restricted content (requires cookies)</blockquote>"
             )
+            _starting.pop(chat_id, None)
+            return
 
     try:
         # Pass message_chat_id only if it's different from chat_id (channel play mode)
