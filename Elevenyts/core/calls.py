@@ -15,6 +15,7 @@
 # ==========================================================
 
 import asyncio
+import html
 import logging
 import os
 import random
@@ -209,6 +210,11 @@ class TgCall(PyTgCalls):
 
         if not media.file_path:
             if message:
+                try:
+                    _why = yt.fail_reason()
+                except Exception:
+                    _why = "Download failed."
+                await self.report_fail(chat_id, media, _why)
                 return await message.edit_text(_lang["error_no_file"].format(config.SUPPORT_CHANNEL))
             else:
                 logger.error(f"No file path for media in {chat_id}")
@@ -274,7 +280,7 @@ class TgCall(PyTgCalls):
             # - rtbufsize 5M: Real-time buffer (crucial for network streams)
             # - fflags +genpts+igndts: Generate PTS, ignore DTS (smooth playback)
             # - sync ext: External sync (reduces A/V desync)
-            ffmpeg_params = "-probesize 10M -analyzeduration 5M -rtbufsize 5M -fflags +genpts+igndts -sync ext"
+            ffmpeg_params = "-probesize 10M -analyzeduration 5M -rtbufsize 5M -fflags +genpts+igndts"
 
         is_video = getattr(media, "video", False)
         video_flags = (
@@ -285,8 +291,9 @@ class TgCall(PyTgCalls):
 
         stream = types.MediaStream(
             media_path=media.file_path,
-            audio_parameters=types.AudioQuality.STUDIO,
+            audio_parameters=types.AudioQuality.HIGH,
             audio_flags=types.MediaStream.Flags.REQUIRED,
+            video_parameters=types.VideoQuality.SD_480p,
             video_flags=video_flags,
             ffmpeg_parameters=ffmpeg_params,
         )
@@ -441,10 +448,31 @@ class TgCall(PyTgCalls):
                         await message.edit_text(_lang["error_no_call"])
                     except Exception:
                         pass
+            elif any(x in error_str for x in ["AUTH_KEY_DUPLICATED", "AUTH_KEY_UNREGISTERED", "AUTH_KEY_INVALID", "SESSION_REVOKED", "SESSION_EXPIRED", "USER_DEACTIVATED"]):
+                logger.error(f"Assistant session problem in play_media for {chat_id}: {e}")
+                await self.stop(chat_id)
+                await self.report_fail(
+                    chat_id, media,
+                    "Assistant STRING_SESSION is invalid: expired, revoked or used in two "
+                    f"places at once ({error_str[:60]}). Stop the other bot using it, or "
+                    "generate a new string session and update STRING_SESSION."
+                )
+                if message:
+                    try:
+                        await message.edit_text(_lang["error_no_file"].format(config.SUPPORT_CHANNEL))
+                    except Exception:
+                        pass
             else:
                 logger.error(f"RPC error in play_media for {chat_id}: {e}")
                 await self.stop(chat_id)
+                await self.report_fail(chat_id, media, f"Telegram error: {error_str[:200]}")
+                if message:
+                    try:
+                        await message.edit_text("❌ Failed to play this song. Please try again later.")
+                    except Exception:
+                        pass
         except exceptions.NoAudioSourceFound:
+            await self.report_fail(chat_id, media, "No audio source found in the downloaded file.")
             if message:
                 try:
                     await message.edit_text(_lang["error_no_audio"])
@@ -453,6 +481,7 @@ class TgCall(PyTgCalls):
             await self.play_next(chat_id)
         except (ConnectionNotFound, TelegramServerError):
             await self.stop(chat_id)
+            await self.report_fail(chat_id, media, "Telegram server / connection error while joining the voice chat.")
             if message:
                 try:
                     await message.edit_text(_lang["error_tg_server"])
@@ -463,6 +492,7 @@ class TgCall(PyTgCalls):
             logger.warning(
                 f"⏱️ Timeout joining voice chat {chat_id}: {error_msg}")
             await self.stop(chat_id)
+            await self.report_fail(chat_id, media, f"Timed out joining the voice chat: {error_msg[:150]}")
             if message:
                 try:
                     await message.edit_text(
@@ -477,6 +507,7 @@ class TgCall(PyTgCalls):
             logger.error(
                 f"Unexpected error in play_media for {chat_id}: {e}", exc_info=True)
             await self.stop(chat_id)
+            await self.report_fail(chat_id, media, f"{type(e).__name__}: {str(e)[:200]}")
             if message:
                 try:
                     await message.edit_text(f"❌ Playback error: {str(e)[:100]}")
@@ -565,6 +596,31 @@ class TgCall(PyTgCalls):
         except Exception as e:
             logger.debug(f"Could not send autoplay limit message in {chat_id}: {e}")
         await self.stop(chat_id)
+
+    async def report_fail(self, chat_id: int, media, reason: str) -> None:
+        """Tell the logger group which song failed to play, where, who
+        asked for it, and why. The group itself only sees a short message."""
+        try:
+            if not app.logger or not await db.is_logger() or chat_id == app.logger:
+                return
+            try:
+                chat = await app.get_chat(chat_id)
+                chat_name = html.escape(chat.title or str(chat_id))
+            except Exception:
+                chat_name = str(chat_id)
+            title = html.escape(str(getattr(media, "title", "") or "Unknown"))
+            url = getattr(media, "url", "") or ""
+            by = getattr(media, "user", None) or "Unknown"
+            text = (
+                f"<u>{app.name} play failed</u>\n\n"
+                f"<b>Group:</b> <code>{chat_id}</code> | {chat_name}\n"
+                f"<b>Song:</b> <a href='{url}'>{title}</a>\n"
+                f"<b>Requested by:</b> {by}\n\n"
+                f"<b>Reason:</b> {html.escape(str(reason))}"
+            )
+            await app.send_message(chat_id=app.logger, text=text)
+        except Exception as e:
+            logger.debug(f"Fail report failed for {chat_id}: {e}")
 
     async def _autoplay_log(self, chat_id: int, media) -> None:
         """Tell the logger group that this song is playing via autoplay."""
