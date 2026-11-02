@@ -622,6 +622,27 @@ class TgCall(PyTgCalls):
         except Exception as e:
             logger.debug(f"Fail report failed for {chat_id}: {e}")
 
+    async def report_search_fail(self, chat_id: int, query: str, user, reason: str) -> None:
+        """Logger-group note when a song could not even be found (search failed)."""
+        try:
+            if not app.logger or not await db.is_logger() or chat_id == app.logger:
+                return
+            try:
+                chat = await app.get_chat(chat_id)
+                chat_name = html.escape(chat.title or str(chat_id))
+            except Exception:
+                chat_name = str(chat_id)
+            text = (
+                f"<u>{app.name} search failed</u>\n\n"
+                f"<b>Group:</b> <code>{chat_id}</code> | {chat_name}\n"
+                f"<b>Searched:</b> {html.escape(str(query)[:100])}\n"
+                f"<b>Requested by:</b> {user or 'Unknown'}\n\n"
+                f"<b>Reason:</b> {html.escape(str(reason))}"
+            )
+            await app.send_message(chat_id=app.logger, text=text)
+        except Exception as e:
+            logger.debug(f"Search fail report failed for {chat_id}: {e}")
+
     async def _autoplay_log(self, chat_id: int, media) -> None:
         """Tell the logger group that this song is playing via autoplay."""
         try:
