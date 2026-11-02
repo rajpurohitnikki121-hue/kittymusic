@@ -268,6 +268,7 @@ async def play_hndlr(
             file = await yt.search(url, sent.id)
 
         if not file:
+            await tune.report_search_fail(chat_id, url, m.from_user.mention, yt.search_error)
             await safe_edit(
                 sent,
                 m.lang["play_not_found"].format(config.SUPPORT_CHANNEL)
@@ -278,6 +279,7 @@ async def play_hndlr(
         query = " ".join(m.command[1:])
         file = await yt.search(query, sent.id)
         if not file:
+            await tune.report_search_fail(chat_id, query, m.from_user.mention, yt.search_error)
             await safe_edit(
                 sent,
                 m.lang["play_not_found"].format(config.SUPPORT_CHANNEL)
