@@ -44,6 +44,7 @@ def checkUB(play):
                 return
             anon_admin = sc.id == m.chat.id
             m.from_user = types.User(
+                client=getattr(m, "_client", None) or app,
                 id=1087968824 if anon_admin else sc.id,
                 first_name="Anonymous Admin" if anon_admin else (sc.title or "Channel"),
                 username="GroupAnonymousBot" if anon_admin else getattr(sc, "username", None),
