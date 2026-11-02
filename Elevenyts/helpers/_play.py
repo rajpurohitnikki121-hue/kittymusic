@@ -33,9 +33,22 @@ def checkUB(play):
             except Exception:
                 return None
         
+        # Anonymous senders have no from_user: an anonymous group admin
+        # (sender_chat is the group itself) or a channel posting in the
+        # group. Give them a stand-in user so the rest of the flow works.
+        anon_admin = False
         if not m.from_user:
-            await safe_reply(m.lang["play_user_invalid"])
-            return
+            sc = getattr(m, "sender_chat", None)
+            if not sc:
+                await safe_reply(m.lang["play_user_invalid"])
+                return
+            anon_admin = sc.id == m.chat.id
+            m.from_user = types.User(
+                id=1087968824 if anon_admin else sc.id,
+                first_name="Anonymous Admin" if anon_admin else (sc.title or "Channel"),
+                username="GroupAnonymousBot" if anon_admin else getattr(sc, "username", None),
+                is_bot=False,
+            )
 
         if m.chat.type != enums.ChatType.SUPERGROUP:
             await safe_reply(m.lang["play_chat_invalid"])
@@ -70,7 +83,7 @@ def checkUB(play):
             return await m.reply_text(m.lang["play_unsupported"])
 
         play_mode = await db.get_play_mode(m.chat.id)
-        if play_mode or force:
+        if (play_mode or force) and not anon_admin:
             adminlist = await db.get_admins(m.chat.id)
             if (
                 m.from_user.id not in adminlist
