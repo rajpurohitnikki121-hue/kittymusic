@@ -59,6 +59,13 @@ class YouTube:
         self.api_max_attempts = 2
         self.api_retry_delay = 2  # seconds between retries
 
+        # Why the last download failed (HTTP codes / "timeout" / "net" /
+        # "bad"). Reset at the start of every API download and used to
+        # tell the user the real reason when play fails.
+        self._fails: list = []
+        # Why the last search failed (shown in the logger group).
+        self.search_error: str = ""
+
         # A real full-length audio file is well over this size even at
         # low bitrates. Providers sometimes return HTTP 200 with a tiny
         # error/placeholder payload instead of actual audio — anything
@@ -102,6 +109,35 @@ class YouTube:
                 logger.info("🔗 Fallback API: (not configured)")
         logger.info(f"🍪 Cookies Fallback: {'ENABLED' if self.enable_cookies_fallback else 'DISABLED'}")
         logger.info("=" * 50)
+
+    def _note_fail(self, code) -> None:
+        try:
+            self._fails.append(str(code))
+        except Exception:
+            pass
+
+    def fail_reason(self) -> str:
+        """Short, user-facing reason for the last failed download."""
+        if not (self.api_url and self.api_key) and not (
+            self.fallback_api_url and self.fallback_api_key
+        ):
+            return "API_URL / API_KEY is not set (no download API configured)."
+        codes = self._fails
+        if any(c in ("401", "403") for c in codes):
+            return "Download API key is invalid or expired (HTTP 401/403). Update API_KEY."
+        if any(c in ("402", "429") for c in codes):
+            return "Download API limit / credits finished (HTTP 402/429). Renew the API key."
+        if any(c == "404" for c in codes):
+            return "Song was not found on the download API (HTTP 404)."
+        if any(c.startswith("5") for c in codes):
+            return "Download API server is down or slow (HTTP 5xx). Try again in a minute."
+        if "timeout" in codes:
+            return "Download API timed out. It may be slow or down, try again."
+        if "net" in codes:
+            return "Could not reach the download API (network error)."
+        if "bad" in codes:
+            return "Download API returned a bad / empty file."
+        return "Download failed (API and cookies both failed)."
 
     def _locate_download_file(self, video_id: str, video: bool = False) -> Optional[str]:
         """Locate any completed download file for a video id."""
@@ -414,6 +450,7 @@ class YouTube:
                     f"({actual_size} bytes). Content preview: {first_chunk[:200]!r}"
                 )
             except Exception:
+                self._note_fail("bad")
                 logger.error(f"❌ API returned non-audio content for {video_id} ({actual_size} bytes)")
             os.remove(tmp_path)
             return None
@@ -488,6 +525,7 @@ class YouTube:
                     logger.info(f"API response status: {response.status}")
 
                     if response.status != 200:
+                        self._note_fail(response.status)
                         try:
                             error_text = await response.text()
                             logger.error(f"API returned status {response.status}: {error_text[:200]}")
@@ -501,9 +539,11 @@ class YouTube:
                         logger.error(f"Failed to parse JSON response from API: {e}")
                         return None
         except asyncio.TimeoutError:
+            self._note_fail("timeout")
             logger.error(f"⏰ API timeout for {video_id} after {self.api_timeout} seconds")
             return None
         except aiohttp.ClientError as e:
+            self._note_fail("net")
             logger.error(f"🌐 API client error for {video_id}: {e}")
             return None
 
@@ -542,6 +582,7 @@ class YouTube:
                     logger.info(f"API stream response status: {response.status}")
 
                     if response.status != 200:
+                        self._note_fail(response.status)
                         try:
                             error_text = await response.text()
                             logger.error(f"API stream returned status {response.status}: {error_text[:200]}")
@@ -551,9 +592,11 @@ class YouTube:
 
                     return await self._save_binary_response(response, file_path, download_type, video_id)
         except asyncio.TimeoutError:
+            self._note_fail("timeout")
             logger.error(f"⏰ API stream timeout for {video_id} after {self.api_stream_timeout} seconds")
             return None
         except aiohttp.ClientError as e:
+            self._note_fail("net")
             logger.error(f"🌐 API stream client error for {video_id}: {e}")
             return None
 
@@ -573,6 +616,7 @@ class YouTube:
                 logger.info(f"API response status: {response.status}")
 
                 if response.status != 200:
+                    self._note_fail(response.status)
                     try:
                         error_text = await response.text()
                         logger.error(f"API returned status {response.status}: {error_text[:200]}")
@@ -630,8 +674,10 @@ class YouTube:
                     return result
 
             except asyncio.TimeoutError:
+                self._note_fail("timeout")
                 logger.error(f"⏰ [{label}] Timeout for {video_id} after {self.api_stream_timeout} seconds")
             except aiohttp.ClientError as e:
+                self._note_fail("net")
                 logger.error(f"🌐 [{label}] Client error for {video_id}: {e}")
             except Exception as e:
                 logger.error(f"❌ [{label}] Download failed for {video_id}: {type(e).__name__}: {e}")
@@ -644,6 +690,7 @@ class YouTube:
     async def download_via_api(self, link: str, video: bool = False) -> Optional[str]:
         """Public entry: serialises downloads of the SAME video so two
         callers never write the same file at once."""
+        self._fails = []
         key = (link.split("v=")[-1].split("&")[0] if "v=" in link else link, video)
         lock = self._video_locks.setdefault(key, asyncio.Lock())
         async with lock:
@@ -923,6 +970,51 @@ class YouTube:
             return link.split("&si")[0].split("?si")[0]
         return None
 
+    async def _search_via_ytdlp(self, query: str) -> Optional[dict]:
+        """Fallback search with yt-dlp. Returns the same dict shape py_yt
+        gives ({"result": [ {...} ]}) so the caller needs no changes."""
+        def _run():
+            opts = {
+                "quiet": True,
+                "no_warnings": True,
+                "skip_download": True,
+                "extract_flat": True,
+                "socket_timeout": 15,
+            }
+            with yt_dlp.YoutubeDL(opts) as ydl:
+                return ydl.extract_info(f"ytsearch1:{query}", download=False)
+
+        try:
+            info = await asyncio.wait_for(asyncio.to_thread(_run), timeout=30)
+            entries = (info or {}).get("entries") or []
+            entry = next((e for e in entries if e and e.get("id")), None)
+            if not entry:
+                return None
+            vid = entry["id"]
+            secs = entry.get("duration")
+            live = bool(entry.get("is_live")) or entry.get("live_status") == "is_live"
+            if live or not secs:
+                duration = None
+            else:
+                secs = int(secs)
+                h, rem = divmod(secs, 3600)
+                m, sec = divmod(rem, 60)
+                duration = f"{h}:{m:02d}:{sec:02d}" if h else f"{m}:{sec:02d}"
+            views = entry.get("view_count")
+            logger.info(f"🔎 Found '{query}' via yt-dlp fallback search")
+            return {"result": [{
+                "id": vid,
+                "title": entry.get("title") or "Unknown",
+                "duration": duration,
+                "channel": {"name": entry.get("channel") or entry.get("uploader")},
+                "thumbnails": [{"url": f"https://i.ytimg.com/vi/{vid}/hqdefault.jpg"}],
+                "link": f"https://www.youtube.com/watch?v={vid}",
+                "viewCount": {"short": f"{views:,} views" if views else None},
+            }]}
+        except Exception as e:
+            logger.warning(f"⚠️ yt-dlp fallback search failed for '{query}': {e}")
+            return None
+
     async def search(self, query: str, m_id: int) -> Track | None:
         """Search for a song on YouTube."""
         cache_key = query
@@ -940,12 +1032,31 @@ class YouTube:
                 fresh.video = False
                 return fresh
 
-        try:
-            _search = VideosSearch(query, limit=1)
-            results = await _search.next()
-        except Exception as e:
-            logger.warning(f"⚠️ YouTube search failed for '{query}': {e}")
-            return None
+        results = None
+        self.search_error = ""
+        for _attempt in range(2):
+            try:
+                _search = VideosSearch(query, limit=1)
+                results = await _search.next()
+                if results and results.get("result"):
+                    break
+            except Exception as e:
+                logger.warning(f"⚠️ YouTube search failed for '{query}' (try {_attempt + 1}/2): {e}")
+                _msg = str(e)
+                if "403" in _msg or "Could not make request" in _msg:
+                    self.search_error = "YouTube blocked the search (HTTP 403) - server IP is blocked by YouTube"
+                else:
+                    self.search_error = f"YouTube search error: {_msg[:120]}"
+            if _attempt == 0:
+                await asyncio.sleep(1.5)
+
+        if not (results and results.get("result")):
+            # py_yt got blocked (403) or returned nothing: try yt-dlp search.
+            results = await self._search_via_ytdlp(query)
+            if not (results and results.get("result")) and not self.search_error:
+                self.search_error = "No result found for this query"
+            elif not (results and results.get("result")):
+                self.search_error += " (yt-dlp fallback search also failed)"
 
         if results and results["result"]:
             data = results["result"][0]
