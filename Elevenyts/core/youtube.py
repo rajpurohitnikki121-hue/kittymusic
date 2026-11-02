@@ -979,13 +979,13 @@ class YouTube:
                 "no_warnings": True,
                 "skip_download": True,
                 "extract_flat": True,
-                "socket_timeout": 15,
+                "socket_timeout": 10,
             }
             with yt_dlp.YoutubeDL(opts) as ydl:
                 return ydl.extract_info(f"ytsearch1:{query}", download=False)
 
         try:
-            info = await asyncio.wait_for(asyncio.to_thread(_run), timeout=30)
+            info = await asyncio.wait_for(asyncio.to_thread(_run), timeout=15)
             entries = (info or {}).get("entries") or []
             entry = next((e for e in entries if e and e.get("id")), None)
             if not entry:
@@ -1034,6 +1034,7 @@ class YouTube:
 
         results = None
         self.search_error = ""
+        _t0 = time.time()
         for _attempt in range(2):
             try:
                 _search = VideosSearch(query, limit=1)
@@ -1048,7 +1049,7 @@ class YouTube:
                 else:
                     self.search_error = f"YouTube search error: {_msg[:120]}"
             if _attempt == 0:
-                await asyncio.sleep(1.5)
+                await asyncio.sleep(0.5)
 
         if not (results and results.get("result")):
             # py_yt got blocked (403) or returned nothing: try yt-dlp search.
@@ -1057,6 +1058,8 @@ class YouTube:
                 self.search_error = "No result found for this query"
             elif not (results and results.get("result")):
                 self.search_error += " (yt-dlp fallback search also failed)"
+
+        logger.info(f"⏱️ Search for '{query}' took {time.time() - _t0:.1f}s")
 
         if results and results["result"]:
             data = results["result"][0]
