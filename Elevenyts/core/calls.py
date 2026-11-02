@@ -289,14 +289,36 @@ class TgCall(PyTgCalls):
             else types.MediaStream.Flags.IGNORE
         )
 
-        stream = types.MediaStream(
-            media_path=media.file_path,
-            audio_parameters=types.AudioQuality.HIGH,
-            audio_flags=types.MediaStream.Flags.REQUIRED,
-            video_parameters=types.VideoQuality.SD_480p,
-            video_flags=video_flags,
-            ffmpeg_parameters=ffmpeg_params,
-        )
+        def _make_stream(video_parameters):
+            kwargs = dict(
+                media_path=media.file_path,
+                audio_parameters=types.AudioQuality.HIGH,
+                audio_flags=types.MediaStream.Flags.REQUIRED,
+                video_flags=video_flags,
+                ffmpeg_parameters=ffmpeg_params,
+            )
+            if video_parameters is not None:
+                kwargs["video_parameters"] = video_parameters
+            return types.MediaStream(**kwargs)
+
+        stream = None
+        if is_video:
+            # Light video (360p, 20 fps) so weak CPUs (Render free) keep
+            # audio and video in sync. Falls back to the preset qualities
+            # if this py-tgcalls version doesn't support custom params.
+            _vp_cls = getattr(types, "VideoParameters", None)
+            if _vp_cls is not None:
+                try:
+                    stream = _make_stream(
+                        _vp_cls(width=640, height=360, frame_rate=20))
+                except Exception as e:
+                    logger.debug(f"Custom video params not supported: {e}")
+                    stream = None
+            if stream is None:
+                _q = getattr(types.VideoQuality, "SD_480p", None)
+                stream = _make_stream(_q)
+        else:
+            stream = _make_stream(None)
 
         self._transition[chat_id] = asyncio.get_event_loop().time()
         try:
