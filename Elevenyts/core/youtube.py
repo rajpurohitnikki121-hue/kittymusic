@@ -48,6 +48,9 @@ class YouTube:
         # retry, or isn't configured at all. Leave blank to disable.
         self.fallback_api_url = config.FALLBACK_API_URL
         self.fallback_api_key = config.FALLBACK_API_KEY
+        # SECOND fallback — tried after the first fallback fails.
+        self.fallback2_api_url = getattr(config, "FALLBACK2_API_URL", "")
+        self.fallback2_api_key = getattr(config, "FALLBACK2_API_KEY", "")
 
         self.enable_api = config.ENABLE_API
         self.enable_cookies_fallback = config.ENABLE_COOKIES_FALLBACK
@@ -120,7 +123,7 @@ class YouTube:
         """Short, user-facing reason for the last failed download."""
         if not (self.api_url and self.api_key) and not (
             self.fallback_api_url and self.fallback_api_key
-        ):
+        ) and not (self.fallback2_api_url and self.fallback2_api_key):
             return "API_URL / API_KEY is not set (no download API configured)."
         codes = self._fails
         if any(c in ("401", "403") for c in codes):
@@ -768,6 +771,15 @@ class YouTube:
             logger.warning(f"⚠️ [FALLBACK FAILED] {video_id}")
         else:
             logger.debug("No fallback API configured")
+
+        # FALLBACK 2
+        if self.fallback2_api_url and self.fallback2_api_key:
+            result = await self._try_provider(
+                self.fallback2_api_url, self.fallback2_api_key, link, video, file_path, video_id, download_type, "FALLBACK2"
+            )
+            if result:
+                return result
+            logger.warning(f"⚠️ [FALLBACK2 FAILED] {video_id}")
 
         return None
 
