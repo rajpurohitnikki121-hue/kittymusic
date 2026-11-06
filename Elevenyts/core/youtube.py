@@ -556,7 +556,66 @@ class YouTube:
             return None
 
         download_type = "video" if video else "audio"
+
+        # FallenApi returns a Telegram post link (t.me/<channel>/<id>)
+        # instead of a direct file: fetch that message through Telegram.
+        tg_match = re.match(
+            r"^https?://(?:www\.)?t\.me/(?:(c)/)?([^/]+)/(\d+)", str(cdn_url).strip()
+        )
+        if tg_match:
+            return await self._download_from_telegram(
+                tg_match, file_path, download_type, video_id
+            )
+
         return await self._download_binary(cdn_url, file_path, {}, download_type, video_id)
+
+    async def _download_from_telegram(self, match, file_path: str, download_type: str, video_id: str) -> Optional[str]:
+        """Download the file attached to a t.me/<channel>/<msg_id> post
+        using the bot (and the assistant account as a backup)."""
+        is_private = bool(match.group(1))
+        chat_part = match.group(2)
+        msg_id = int(match.group(3))
+        chat_ref = int(f"-100{chat_part}") if is_private else chat_part
+
+        # Imported here to avoid a circular import at module load time.
+        from Elevenyts import app, userbot
+
+        clients = [("bot", app)]
+        try:
+            clients += [("assistant", c) for c in getattr(userbot, "clients", [])]
+        except Exception:
+            pass
+
+        os.makedirs(os.path.dirname(file_path) or ".", exist_ok=True)
+        for name, client in clients:
+            try:
+                msg = await client.get_messages(chat_ref, msg_id)
+                if not msg or getattr(msg, "empty", False) or not getattr(msg, "media", None):
+                    logger.error(f"❌ Telegram post {chat_ref}/{msg_id} has no media (via {name})")
+                    continue
+                logger.info(f"📥 Downloading {download_type} from Telegram post {chat_ref}/{msg_id} via {name} for {video_id}...")
+                path = await asyncio.wait_for(
+                    client.download_media(msg, file_name=file_path),
+                    timeout=self.api_stream_timeout,
+                )
+                if not path or not os.path.exists(path):
+                    continue
+                size = os.path.getsize(path)
+                if size < self.min_valid_file_bytes:
+                    logger.error(f"❌ Telegram file too small ({size} bytes) for {video_id}")
+                    os.remove(path)
+                    self._note_fail("bad")
+                    continue
+                if os.path.abspath(path) != os.path.abspath(file_path):
+                    os.replace(path, file_path)
+                logger.info(f"✅ [API SUCCESS] Downloaded via Telegram: {file_path} ({size / (1024 * 1024):.2f} MB)")
+                return file_path
+            except asyncio.TimeoutError:
+                self._note_fail("timeout")
+                logger.error(f"⏰ Telegram download timeout for {video_id} via {name}")
+            except Exception as e:
+                logger.error(f"❌ Telegram download failed for {video_id} via {name}: {type(e).__name__}: {e}")
+        return None
 
     async def _download_via_yukiapi(self, api_url: str, api_key: str, link: str, video: bool, file_path: str, video_id: str) -> Optional[str]:
         """
