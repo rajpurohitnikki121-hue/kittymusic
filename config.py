@@ -84,6 +84,12 @@ class Config:
         self.FALLBACK_API_URL: str = self._clean_base_url(getenv("FALLBACK_API_URL", ""))
         self.FALLBACK_API_KEY: str = getenv("FALLBACK_API_KEY", "").strip()
 
+        # SECOND fallback provider — tried only after the first fallback
+        # also fails. Leave blank to disable.
+        # Example: FALLBACK2_API_URL=https://music.yukiapi.site
+        self.FALLBACK2_API_URL: str = self._clean_base_url(getenv("FALLBACK2_API_URL", ""))
+        self.FALLBACK2_API_KEY: str = getenv("FALLBACK2_API_KEY", "").strip()
+
         self.ENABLE_API: bool = self._str_to_bool(getenv("ENABLE_API", "True"))
         self.ENABLE_COOKIES_FALLBACK: bool = self._str_to_bool(getenv("ENABLE_COOKIES_FALLBACK", "True"))
         self.API_TIMEOUT: int = int(getenv("API_TIMEOUT", "60"))
