@@ -128,11 +128,12 @@ class Inline:
                         text="\u27F3", callback_data=f"controls replay {chat_id}"),
                 ]
             )
-            # Row 2: Autoplay
-            keyboard.append([self._autoplay_button(chat_id)])
-            # Row 3: Close
+            # Row 2: Autoplay (left) | Close (right), side by side
             keyboard.append(
-                [self.ikb(text=BTN_CLOSE, callback_data=f"controls close {chat_id}")]
+                [
+                    self._autoplay_button(chat_id),
+                    self.ikb(text=BTN_CLOSE, callback_data=f"controls close {chat_id}"),
+                ]
             )
         return self.ikm(keyboard)
 
@@ -323,4 +324,4 @@ class Inline:
                     self.ikb(text=f"{S_PLAY} {_f('Open In YouTube')}", url=link),
                 ],
             ]
-        )
+)
