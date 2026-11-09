@@ -39,6 +39,29 @@ def _build_font_map() -> dict:
 _FONT = _build_font_map()
 
 
+# Light sans-serif font used for the bracket-style buttons: 𝖠𝗎𝗍𝗈 𝖢𝗅𝗈𝗌𝖾
+def _build_light_map() -> dict:
+    mapping = {}
+    for i in range(26):
+        mapping[chr(65 + i)] = chr(0x1D5A0 + i)  # A-Z
+        mapping[chr(97 + i)] = chr(0x1D5BA + i)  # a-z
+    for i in range(10):
+        mapping[chr(48 + i)] = chr(0x1D7E2 + i)  # 0-9
+    return mapping
+
+
+_LIGHT = _build_light_map()
+
+
+def _g(text: str) -> str:
+    return "".join(_LIGHT.get(ch, ch) for ch in text)
+
+
+def _b(text: str) -> str:
+    """Bracket style label:  \u231C 𝖮𝗐𝗇𝖾𝗋 \u231F"""
+    return f"\u231C {_g(text)} \u231F"
+
+
 def _f(text: str) -> str:
     return "".join(_FONT.get(ch, ch) for ch in text)
 
@@ -58,9 +81,9 @@ S_DOT = "\u00B7"      # ·
 S_BACK = "\u00AB"     # «
 
 # Player button labels (exact Ishq Music style)
-BTN_AUTOPLAY_ON = "\U0001D400\u200C\u03C5\u1D1B\u03C3\u1D18\u029F\u1D00\u028F \U0001D40E\u0274"
-BTN_AUTOPLAY_OFF = "\U0001D400\u200C\u03C5\u1D1B\u03C3\u1D18\u029F\u1D00\u028F \U0001D40E\ua730\ua730"
-BTN_CLOSE = "\u00D7 \U0001D402\u200C\u029F\u03C3s\u1D07"
+BTN_AUTOPLAY_ON = _g("Auto") + " " + _b("On")
+BTN_AUTOPLAY_OFF = _g("Auto") + " " + _b("Off")
+BTN_CLOSE = "\u2A2F " + _g("Close")
 
 
 # ----------------------------------------------------------
@@ -87,12 +110,11 @@ class Inline:
         return self.ikm([[self.ikb(text=text, callback_data=f"cancel_dl", style=ButtonStyle.PRIMARY)]])
 
     def _autoplay_button(self, chat_id: int) -> types.InlineKeyboardButton:
-        # Label shows ON/OFF in words; colour: green = ON, blue = OFF.
+        # Label shows ON/OFF in words. No colour.
         on = autoplay.is_enabled(chat_id)
         return self.ikb(
             text=BTN_AUTOPLAY_ON if on else BTN_AUTOPLAY_OFF,
             callback_data=f"controls autoplay {chat_id}",
-            style=ButtonStyle.SUCCESS if on else ButtonStyle.PRIMARY,
         )
 
     def controls(
@@ -106,12 +128,14 @@ class Inline:
         if status:
             keyboard.append(
                 [self.ikb(
-                    text=status, callback_data=f"controls status {chat_id}")]
+                    text=status, callback_data=f"controls status {chat_id}",
+                    style=ButtonStyle.PRIMARY)]
             )
         elif timer:
             keyboard.append(
                 [self.ikb(
-                    text=timer, callback_data=f"controls status {chat_id}")]
+                    text=timer, callback_data=f"controls status {chat_id}",
+                    style=ButtonStyle.PRIMARY)]
             )
 
         if not remove:
@@ -132,7 +156,10 @@ class Inline:
             keyboard.append(
                 [
                     self._autoplay_button(chat_id),
-                    self.ikb(text=BTN_CLOSE, callback_data=f"controls close {chat_id}"),
+                    self.ikb(
+                        text=BTN_CLOSE,
+                        callback_data=f"controls close {chat_id}",
+                    ),
                 ]
             )
         return self.ikm(keyboard)
@@ -144,43 +171,43 @@ class Inline:
         if back:
             rows = [
                 [
-                    self.ikb(text=f"{S_BACK} {_f('Back')}", callback_data="help_main"),
+                    self.ikb(text=_b("Back"), callback_data="help_main", style=ButtonStyle.PRIMARY),
                 ]
             ]
         else:
             # Help menu with categorized buttons (3 per row)
             rows = [
                 [
-                    self.ikb(text=_f("Admins"), callback_data="help_admins"),
-                    self.ikb(text=_f("Auth"), callback_data="help_auth"),
-                    self.ikb(text=_f("Broadcast"), callback_data="help_broadcast"),
+                    self.ikb(text=_b("Admins"), callback_data="help_admins", style=ButtonStyle.PRIMARY),
+                    self.ikb(text=_b("Auth"), callback_data="help_auth", style=ButtonStyle.PRIMARY),
+                    self.ikb(text=_b("Broadcast"), callback_data="help_broadcast", style=ButtonStyle.PRIMARY),
                 ],
                 [
-                    self.ikb(text=_f("BL-Chat"), callback_data="help_blchat"),
-                    self.ikb(text=_f("BL-User"), callback_data="help_bluser"),
-                    self.ikb(text=_f("G-Ban"), callback_data="help_gban"),
+                    self.ikb(text=_b("BL-Chat"), callback_data="help_blchat", style=ButtonStyle.PRIMARY),
+                    self.ikb(text=_b("BL-User"), callback_data="help_bluser", style=ButtonStyle.PRIMARY),
+                    self.ikb(text=_b("G-Ban"), callback_data="help_gban", style=ButtonStyle.PRIMARY),
                 ],
                 [
-                    self.ikb(text=_f("Loop"), callback_data="help_loop"),
-                    self.ikb(text=_f("Play"), callback_data="help_play"),
-                    self.ikb(text=_f("Queue"), callback_data="help_queue"),
+                    self.ikb(text=_b("Loop"), callback_data="help_loop", style=ButtonStyle.PRIMARY),
+                    self.ikb(text=_b("Play"), callback_data="help_play", style=ButtonStyle.PRIMARY),
+                    self.ikb(text=_b("Queue"), callback_data="help_queue", style=ButtonStyle.PRIMARY),
                 ],
                 [
-                    self.ikb(text=_f("Seek"), callback_data="help_seek"),
-                    self.ikb(text=_f("Shuffle"), callback_data="help_shuffle"),
-                    self.ikb(text=_f("Ping"), callback_data="help_ping"),
+                    self.ikb(text=_b("Seek"), callback_data="help_seek", style=ButtonStyle.PRIMARY),
+                    self.ikb(text=_b("Shuffle"), callback_data="help_shuffle", style=ButtonStyle.PRIMARY),
+                    self.ikb(text=_b("Ping"), callback_data="help_ping", style=ButtonStyle.PRIMARY),
                 ],
                 [
-                    self.ikb(text=_f("Stats"), callback_data="help_stats"),
-                    self.ikb(text=_f("Sudo"), callback_data="help_sudo"),
-                    self.ikb(text=_f("Maintenance"), callback_data="help_maintenance"),
+                    self.ikb(text=_b("Stats"), callback_data="help_stats", style=ButtonStyle.PRIMARY),
+                    self.ikb(text=_b("Sudo"), callback_data="help_sudo", style=ButtonStyle.PRIMARY),
+                    self.ikb(text=_b("Maintenance"), callback_data="help_maintenance", style=ButtonStyle.PRIMARY),
                 ],
                 [
-                    self.ikb(text=_f("Tag All"), callback_data="tagall_info"),
-                    self.ikb(text=_f("Autoplay"), callback_data="autoplay_info"),
+                    self.ikb(text=_b("Tag All"), callback_data="tagall_info", style=ButtonStyle.PRIMARY),
+                    self.ikb(text=_b("Autoplay"), callback_data="autoplay_info", style=ButtonStyle.PRIMARY),
                 ],
                 [
-                    self.ikb(text=f"{S_BACK} {_f('Back')}", callback_data="start"),
+                    self.ikb(text=_b("Back"), callback_data="start", style=ButtonStyle.PRIMARY),
                 ]
             ]
         return self.ikm(rows)
@@ -280,7 +307,7 @@ class Inline:
                 return self.ikb(text=label, icon_custom_emoji_id=icon, **kw)
             except TypeError:
                 pass  # old pyrogram without custom-emoji buttons
-        return self.ikb(text=f"{symbol} {label}", **kw)
+        return self.ikb(text=f"{symbol} {label}" if symbol else label, **kw)
 
     def start_key(
         self, lang: dict, private: bool = False
@@ -293,23 +320,23 @@ class Inline:
         # is known.
         owner_url = getattr(app, "owner_url", "") or ""
         second_row = [
-            self._start_btn("𝐂𝐡𝐚𝐧𝐧𝐞𝐥", "✦", "channel",
+            self._start_btn(_b("Channel"), "", "channel",
                             url=config.UPDATE_CHANNEL, style=P),
         ]
         if owner_url.startswith("https://"):
             second_row.append(
-                self._start_btn("𝐎𝐰𝐧𝐞𝐫", "♛", "owner",
+                self._start_btn(_b("Owner"), "", "owner",
                                 url=owner_url, style=P))
         rows = [
             [
-                self._start_btn("𝐂𝐨𝐦𝐦𝐚𝐧𝐝𝐬", "♫", "commands",
+                self._start_btn(_b("Commands"), "", "commands",
                                 callback_data="help", style=P),
-                self._start_btn("𝐒𝐮𝐩𝐩𝐨𝐫𝐭", "♡", "support",
+                self._start_btn(_b("Support"), "", "support",
                                 url=config.SUPPORT_CHANNEL, style=P),
             ],
             second_row,
             [
-                self._start_btn("𝐀𝐝𝐝 𝐌𝐞", "⌂", "addme",
+                self._start_btn(_b("Add Me"), "", "addme",
                                 url=f"https://t.me/{app.username}?startgroup=true",
                                 style=P),
             ],
@@ -324,4 +351,4 @@ class Inline:
                     self.ikb(text=f"{S_PLAY} {_f('Open In YouTube')}", url=link),
                 ],
             ]
-)
+        )
