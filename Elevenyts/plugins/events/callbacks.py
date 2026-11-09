@@ -98,7 +98,7 @@ async def _controls(_, query: types.CallbackQuery):
         if who.username:
             name = f"@{who.username}"
         else:
-            name = html.escape(who.first_name or "User")
+            name = who.mention
         try:
             await query.message.delete()
         except Exception:
@@ -106,11 +106,7 @@ async def _controls(_, query: types.CallbackQuery):
         try:
             await app.send_message(
                 chat_id=query.message.chat.id,
-                text=(
-                    "\u2661 \U0001D40F\u200C\u029F\u1D00\u028F \U0001D40C\u200C\u0454\u1D05\u026A\u1D00 "
-                    "\U0001D402\u200C\u029F\u03C3s\u0454\u1D05 \u2661\n\n"
-                    f"\u2727 Closed by {name}"
-                ),
+                text=f"\u2727 Closed by : {name}",
                 parse_mode=enums.ParseMode.HTML,
             )
         except Exception:
@@ -581,4 +577,4 @@ async def _playmode(_, query: types.CallbackQuery):
             _language,
             chat_id,
         )
-    )
+            )
