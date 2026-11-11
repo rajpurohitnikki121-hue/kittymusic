@@ -90,6 +90,16 @@ class Config:
         self.FALLBACK2_API_URL: str = self._clean_base_url(getenv("FALLBACK2_API_URL", ""))
         self.FALLBACK2_API_KEY: str = getenv("FALLBACK2_API_KEY", "").strip()
 
+        # Optional sticker (file_id) shown while a song is being processed.
+        # Blank = the normal emoji message is used. Get the id by sending
+        # a sticker to the bot in private (owner/sudo only).
+        self.PLAY_STICKER: str = getenv("PLAY_STICKER", "").strip()
+
+        # Optional official YouTube Data API v3 key (Google Cloud, free).
+        # Used as the LAST search fallback when YouTube blocks the server
+        # IP for normal search. Blank = disabled.
+        self.YOUTUBE_API_KEY: str = getenv("YOUTUBE_API_KEY", "").strip()
+
         self.ENABLE_API: bool = self._str_to_bool(getenv("ENABLE_API", "True"))
         self.ENABLE_COOKIES_FALLBACK: bool = self._str_to_bool(getenv("ENABLE_COOKIES_FALLBACK", "True"))
         self.API_TIMEOUT: int = int(getenv("API_TIMEOUT", "60"))
