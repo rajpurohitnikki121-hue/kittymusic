@@ -1184,9 +1184,10 @@ class YouTube:
 
         if not (results and results.get("result")):
             # py_yt got blocked (403) or returned nothing: try yt-dlp search.
-            results = await self._search_via_ytdlp(query)
+            # Official API first (fast, not IP-blocked); yt-dlp after it.
+            results = await self._search_via_youtube_api(query)
             if not (results and results.get("result")):
-                results = await self._search_via_youtube_api(query)
+                results = await self._search_via_ytdlp(query)
             if not (results and results.get("result")) and not self.search_error:
                 self.search_error = "No result found for this query"
             elif not (results and results.get("result")):
