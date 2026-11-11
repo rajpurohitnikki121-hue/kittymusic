@@ -1042,6 +1042,40 @@ class YouTube:
             return link.split("&si")[0].split("?si")[0]
         return None
 
+    async def _search_via_search_api(self, query: str) -> Optional[dict]:
+        """Search through a hosted search API (SEARCH_API_URL/SEARCH_API_KEY).
+        Expected: GET <url>/search?q=<query>&limit=1&api_key=<key> returning
+        {"result": [ {id, title, duration, thumbnails, link, channel, ...} ]}
+        (same shape as py_yt, so it is returned as is)."""
+        base = getattr(config, "SEARCH_API_URL", "")
+        key = getattr(config, "SEARCH_API_KEY", "")
+        if not (base and key):
+            return None
+        try:
+            timeout = aiohttp.ClientTimeout(total=10)
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                async with session.get(
+                    f"{base}/search",
+                    params={"q": query, "limit": 1, "api_key": key},
+                ) as r:
+                    if r.status != 200:
+                        logger.warning(f"⚠️ Search API status {r.status} for '{query}'")
+                        if r.status in (401, 403):
+                            self.search_error = "Search API key is invalid or expired (check SEARCH_API_KEY)"
+                        else:
+                            self.search_error = f"Search API error (HTTP {r.status})"
+                        return None
+                    data = await r.json(content_type=None)
+            items = (data or {}).get("result") or []
+            first = items[0] if items else None
+            if not first or not first.get("id"):
+                return None
+            logger.info(f"🔎 Found '{query}' via Search API")
+            return {"result": [first]}
+        except Exception as e:
+            logger.warning(f"⚠️ Search API failed for '{query}': {e}")
+            return None
+
     async def _search_via_youtube_api(self, query: str) -> Optional[dict]:
         """Last fallback: official YouTube Data API v3 (needs YOUTUBE_API_KEY).
         Not affected by YouTube blocking the server IP. Same return shape
@@ -1184,8 +1218,11 @@ class YouTube:
 
         if not (results and results.get("result")):
             # py_yt got blocked (403) or returned nothing: try yt-dlp search.
-            # Official API first (fast, not IP-blocked); yt-dlp after it.
-            results = await self._search_via_youtube_api(query)
+            # Hosted search API, then the official YouTube API (both fast
+            # and not IP-blocked); yt-dlp last.
+            results = await self._search_via_search_api(query)
+            if not (results and results.get("result")):
+                results = await self._search_via_youtube_api(query)
             if not (results and results.get("result")):
                 results = await self._search_via_ytdlp(query)
             if not (results and results.get("result")) and not self.search_error:
