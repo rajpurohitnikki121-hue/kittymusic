@@ -15,6 +15,7 @@
 # ==========================================================
 
 import os
+import html
 import re
 import glob
 import time
@@ -1041,6 +1042,64 @@ class YouTube:
             return link.split("&si")[0].split("?si")[0]
         return None
 
+    async def _search_via_youtube_api(self, query: str) -> Optional[dict]:
+        """Last fallback: official YouTube Data API v3 (needs YOUTUBE_API_KEY).
+        Not affected by YouTube blocking the server IP. Same return shape
+        as py_yt ({"result": [ {...} ]})."""
+        key = getattr(config, "YOUTUBE_API_KEY", "")
+        if not key:
+            return None
+        try:
+            timeout = aiohttp.ClientTimeout(total=10)
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                async with session.get(
+                    "https://www.googleapis.com/youtube/v3/search",
+                    params={"part": "snippet", "type": "video", "maxResults": 1,
+                            "q": query, "key": key},
+                ) as r:
+                    if r.status != 200:
+                        logger.warning(f"⚠️ YouTube Data API search status {r.status} for '{query}'")
+                        self.search_error = f"YouTube Data API error (HTTP {r.status}) - check YOUTUBE_API_KEY / quota"
+                        return None
+                    data = await r.json(content_type=None)
+                items = data.get("items") or []
+                if not items:
+                    return None
+                vid = items[0]["id"]["videoId"]
+                snip = items[0].get("snippet", {})
+                duration = None
+                views = None
+                async with session.get(
+                    "https://www.googleapis.com/youtube/v3/videos",
+                    params={"part": "contentDetails,statistics", "id": vid, "key": key},
+                ) as r2:
+                    if r2.status == 200:
+                        d2 = await r2.json(content_type=None)
+                        it = (d2.get("items") or [None])[0]
+                        if it:
+                            m = re.match(
+                                r"PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?",
+                                it.get("contentDetails", {}).get("duration", ""),
+                            )
+                            if m:
+                                h, mi, se = (int(x or 0) for x in m.groups())
+                                if h or mi or se:
+                                    duration = f"{h}:{mi:02d}:{se:02d}" if h else f"{mi}:{se:02d}"
+                            views = it.get("statistics", {}).get("viewCount")
+            logger.info(f"🔎 Found '{query}' via YouTube Data API")
+            return {"result": [{
+                "id": vid,
+                "title": html.unescape(snip.get("title") or "Unknown"),
+                "duration": duration,
+                "channel": {"name": snip.get("channelTitle")},
+                "thumbnails": [{"url": f"https://i.ytimg.com/vi/{vid}/hqdefault.jpg"}],
+                "link": f"https://www.youtube.com/watch?v={vid}",
+                "viewCount": {"short": f"{int(views):,} views" if views else None},
+            }]}
+        except Exception as e:
+            logger.warning(f"⚠️ YouTube Data API search failed for '{query}': {e}")
+            return None
+
     async def _search_via_ytdlp(self, query: str) -> Optional[dict]:
         """Fallback search with yt-dlp. Returns the same dict shape py_yt
         gives ({"result": [ {...} ]}) so the caller needs no changes."""
@@ -1060,6 +1119,7 @@ class YouTube:
             entries = (info or {}).get("entries") or []
             entry = next((e for e in entries if e and e.get("id")), None)
             if not entry:
+                logger.warning(f"⚠️ yt-dlp fallback search returned no result for '{query}'")
                 return None
             vid = entry["id"]
             secs = entry.get("duration")
@@ -1125,6 +1185,8 @@ class YouTube:
         if not (results and results.get("result")):
             # py_yt got blocked (403) or returned nothing: try yt-dlp search.
             results = await self._search_via_ytdlp(query)
+            if not (results and results.get("result")):
+                results = await self._search_via_youtube_api(query)
             if not (results and results.get("result")) and not self.search_error:
                 self.search_error = "No result found for this query"
             elif not (results and results.get("result")):
