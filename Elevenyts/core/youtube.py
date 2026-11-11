@@ -745,6 +745,13 @@ class YouTube:
             except Exception as e:
                 logger.error(f"❌ [{label}] Download failed for {video_id}: {type(e).__name__}: {e}")
 
+            # Server error (5xx) or timeout: the provider is struggling, so
+            # retrying it just wastes time. Go to the next provider now.
+            _last = self._fails[-1] if self._fails else ""
+            if _last.startswith("5") or _last == "timeout":
+                logger.info(f"⏭️ [{label}] Server error/timeout ({_last}), skipping retry")
+                break
+
             if attempt < self.api_max_attempts:
                 await asyncio.sleep(self.api_retry_delay)
 
