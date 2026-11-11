@@ -215,7 +215,7 @@ async def play_hndlr(
 
     # Select emoji for this play session
     play_emoji = m.lang["play_emoji"]
-    
+
     try:
         sent = await safe_reply(m, m.lang["play_searching"].format(play_emoji))
     except FloodWait as e:
