@@ -95,6 +95,13 @@ class Config:
         # IP for normal search. Blank = disabled.
         self.YOUTUBE_API_KEY: str = getenv("YOUTUBE_API_KEY", "").strip()
 
+        # Optional search API (GET <url>/search?q=..&limit=1&api_key=..)
+        # that answers in the same format as YouTube search. Tried right
+        # after the normal search fails. Blank = disabled.
+        # Example: SEARCH_API_URL=https://api.riteshyt.in
+        self.SEARCH_API_URL: str = self._clean_base_url(getenv("SEARCH_API_URL", ""))
+        self.SEARCH_API_KEY: str = getenv("SEARCH_API_KEY", "").strip()
+
         self.ENABLE_API: bool = self._str_to_bool(getenv("ENABLE_API", "True"))
         self.ENABLE_COOKIES_FALLBACK: bool = self._str_to_bool(getenv("ENABLE_COOKIES_FALLBACK", "True"))
         self.API_TIMEOUT: int = int(getenv("API_TIMEOUT", "60"))
