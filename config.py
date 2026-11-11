@@ -104,7 +104,7 @@ class Config:
 
         self.ENABLE_API: bool = self._str_to_bool(getenv("ENABLE_API", "True"))
         self.ENABLE_COOKIES_FALLBACK: bool = self._str_to_bool(getenv("ENABLE_COOKIES_FALLBACK", "True"))
-        self.API_TIMEOUT: int = int(getenv("API_TIMEOUT", "60"))
+        self.API_TIMEOUT: int = int(getenv("API_TIMEOUT", "20"))
         self.API_STREAM_TIMEOUT: int = int(getenv("API_STREAM_TIMEOUT", "300"))
 
         # YouTube Cookies
