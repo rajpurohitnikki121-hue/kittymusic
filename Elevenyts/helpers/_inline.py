@@ -81,9 +81,13 @@ S_DOT = "\u00B7"      # ·
 S_BACK = "\u00AB"     # «
 
 # Player button labels (exact Ishq Music style)
-BTN_AUTOPLAY_ON = _g("Auto") + " " + _b("On")
-BTN_AUTOPLAY_OFF = _g("Auto") + " " + _b("Off")
-BTN_CLOSE = "\u2A2F " + _g("Close")
+BTN_AUTOPLAY_ON = "Autoplay: On"
+BTN_AUTOPLAY_OFF = "Autoplay: Off"
+BTN_CLOSE = "\u2A2F Close"
+BTN_REPLAY = "\u21BA Replay"
+BTN_PAUSE = "II Pause"
+BTN_RESUME = "\u25B7 Resume"
+BTN_SKIP = "\u00BB Skip"
 
 
 # ----------------------------------------------------------
@@ -117,6 +121,20 @@ class Inline:
             callback_data=f"controls autoplay {chat_id}",
         )
 
+    def _is_paused(self, chat_id: int) -> bool:
+        """True when the stream of this chat is currently paused."""
+        try:
+            from Elevenyts import db
+            return db.active_calls.get(chat_id) == 0
+        except Exception:
+            return False
+
+    @staticmethod
+    def _style(name: str) -> dict:
+        """{'style': ButtonStyle.X} if this pyrogram has it, else {}."""
+        st = getattr(ButtonStyle, name, None)
+        return {"style": st} if st is not None else {}
+
     def controls(
         self,
         chat_id: int,
@@ -125,34 +143,43 @@ class Inline:
         remove: bool = False,
     ) -> types.InlineKeyboardMarkup:
         keyboard = []
+        # Row 0: timer / status (no colour)
         if status:
             keyboard.append(
-                [self.ikb(
-                    text=status, callback_data=f"controls status {chat_id}",
-                    style=ButtonStyle.PRIMARY)]
+                [self.ikb(text=status, callback_data=f"controls status {chat_id}")]
             )
         elif timer:
             keyboard.append(
-                [self.ikb(
-                    text=timer, callback_data=f"controls status {chat_id}",
-                    style=ButtonStyle.PRIMARY)]
+                [self.ikb(text=timer, callback_data=f"controls status {chat_id}")]
             )
 
         if not remove:
-            # Row 1: Play | Pause | Skip | Repeat (same callbacks as before)
+            paused = self._is_paused(chat_id)
+            # Row 1: Replay | Pause (Resume when paused) | Skip
             keyboard.append(
                 [
                     self.ikb(
-                        text="\u25B7", callback_data=f"controls resume {chat_id}"),
+                        text=BTN_REPLAY,
+                        callback_data=f"controls replay {chat_id}",
+                        **self._style("DANGER"),
+                    ),
                     self.ikb(
-                        text="\u2161", callback_data=f"controls pause {chat_id}"),
+                        text=BTN_RESUME if paused else BTN_PAUSE,
+                        callback_data=(
+                            f"controls resume {chat_id}"
+                            if paused
+                            else f"controls pause {chat_id}"
+                        ),
+                        **self._style("SUCCESS"),
+                    ),
                     self.ikb(
-                        text="\u00BB", callback_data=f"controls skip {chat_id}"),
-                    self.ikb(
-                        text="\u27F3", callback_data=f"controls replay {chat_id}"),
+                        text=BTN_SKIP,
+                        callback_data=f"controls skip {chat_id}",
+                        **self._style("DANGER"),
+                    ),
                 ]
             )
-            # Row 2: Autoplay (left) | Close (right), side by side
+            # Row 2: Autoplay (left) | Close (right), no colour
             keyboard.append(
                 [
                     self._autoplay_button(chat_id),
@@ -351,4 +378,4 @@ class Inline:
                     self.ikb(text=f"{S_PLAY} {_f('Open In YouTube')}", url=link),
                 ],
             ]
-        )
+)
