@@ -14,6 +14,7 @@
 # of this source code without permission is prohibited.
 # ==========================================================
 import html
+import os
 
 from pyrogram import filters, types
 from pyrogram.errors import ChatAdminRequired, ChannelPrivate
@@ -21,7 +22,10 @@ from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 from Elevenyts import app, config
 
-GROUP_IMG = "https://files.catbox.moe/4qgc5d.jpg"
+# Welcome image shown when the bot is added to a group. By default the
+# picture embedded in helpers/_welcome_img.py is used. Optionally set the
+# GROUP_IMG environment variable to an image link to override it.
+GROUP_IMG = os.getenv("GROUP_IMG", "").strip()
 
 
 def _bot_name() -> str:
@@ -33,12 +37,12 @@ def _group_welcome_markup():
     return InlineKeyboardMarkup([
         [
             InlineKeyboardButton(
-                text="♡ + 𝐀𝐝𝐝 𝐌𝐞",
+                text="≡ ᴀᴅᴅ ᴍᴇ ≡",
                 url=f"https://t.me/{app.username}?startgroup=true"
             ),
             InlineKeyboardButton(
-                text="✦ 𝐇𝐞𝐥𝐩",
-                callback_data="help"
+                text="≡ sᴜᴘᴘᴏʀᴛ ≡",
+                url=config.SUPPORT_CHANNEL
             ),
         ]
     ])
@@ -94,11 +98,12 @@ async def new_chat_member(_, message: types.Message):
 """
 
             # Group welcome message (public — uses this bot's own name)
+            adder = added_by.mention if added_by else "ᴛʜᴇʀᴇ"
             group_text = (
-                f"♡ 𝐓𝐡𝐚𝐧𝐤 𝐘𝐨𝐮 𝐅𝐨𝐫 𝐀𝐝𝐝𝐢𝐧𝐠 𝐌𝐞 ♡\n\n"
-                f"🎵 𐙚 {_bot_name()} ᥫ᭡\n\n"
-                f"🥀 𝐑𝐞𝐚𝐝𝐲 𝐓𝐨 𝐏𝐥𝐚𝐲 𝐘𝐨𝐮𝐫 𝐅𝐚𝐯𝐨𝐮𝐫𝐢𝐭𝐞 𝐌𝐮𝐬𝐢𝐜.\n\n"
-                f"𝐓𝐡𝐚𝐧𝐤 𝐲𝐨𝐮 𝐟𝐨𝐫 𝐚𝐝𝐝𝐢𝐧𝐠 𝐦𝐞 𝐭𝐨 {chat_name} ♡"
+                f"❖ ʜᴇʏ {adder},\n"
+                f"ᴛʜɪs ɪs <i>{_bot_name()}</i>\n\n"
+                f"ᴛʜᴀɴᴋs ꜰᴏʀ ᴀᴅᴅɪɴɢ ᴍᴇ ɪɴ {html.escape(chat_name or '')}, "
+                f"<i>{_bot_name()}</i> ᴄᴀɴ ɴᴏᴡ ᴘʟᴀʏ sᴏɴɢs ɪɴ ᴛʜɪs ᴄʜᴀᴛ."
             )
 
             # Send logger notification
@@ -121,9 +126,14 @@ async def new_chat_member(_, message: types.Message):
 
             # Send group welcome message with buttons
             try:
+                if GROUP_IMG:
+                    photo = GROUP_IMG
+                else:
+                    from Elevenyts.helpers._welcome_img import welcome_image
+                    photo = welcome_image()
                 await app.send_photo(
                     chat_id=chat_id,
-                    photo=GROUP_IMG,
+                    photo=photo,
                     caption=group_text,
                     reply_markup=_group_welcome_markup()
                 )
