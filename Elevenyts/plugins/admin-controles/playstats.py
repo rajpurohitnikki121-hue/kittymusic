@@ -1,4 +1,4 @@
-# /playstats - OWNER ONLY. Shows how many songs the bot has played, and how
+# /playstats - OWNER and SUDO users only. Shows how many songs the bot has played, and how
 # many each sudo user (and the owner) requested.
 import asyncio
 import re
@@ -37,7 +37,7 @@ async def _name(uid: int) -> str:
         return f"<code>{uid}</code>"
 
 
-@app.on_message(filters.command(["playstats", "songstats"]) & filters.user(config.OWNER_ID))
+@app.on_message(filters.command(["playstats", "songstats"]) & app.sudo_filter)
 async def playstats_cmd(_, m: types.Message):
     stats = await db.get_play_stats()
     users = {int(k): v for k, v in (stats.get("users") or {}).items()}
