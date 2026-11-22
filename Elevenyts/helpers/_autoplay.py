@@ -26,7 +26,7 @@ import re
 # After this many AUTOPLAY songs in one voice-chat session (autoplay ON), the
 # bot says goodbye and leaves the voice chat. Songs that people request or
 # add to the queue are NOT counted, and they are always played first.
-LIMIT = 20
+LIMIT = 40
 
 _enabled: dict = {}       # chat_id -> bool
 _count: dict = {}         # chat_id -> AUTOPLAY songs played this session
@@ -34,6 +34,10 @@ _last_counted: dict = {}  # chat_id -> id of the last song that was counted
 _played: dict = {}        # chat_id -> set of video ids already played
 _titles: dict = {}        # chat_id -> set of normalized titles already played
 _last_track: dict = {}    # chat_id -> last Track/Media that started playing
+# Optional callback(chat_id, media) run every time a song starts playing.
+# (Used by the /playstats feature to count songs; set from a plugin.)
+play_hook = None
+
 _anchor: dict = {}        # chat_id -> last song chosen by a USER (sets the mood)
 
 # Words that don't change which song it is (different uploads of one song
@@ -98,6 +102,11 @@ def note_played(chat_id: int, media) -> None:
     """Call every time a song starts playing in a chat."""
     vid = getattr(media, "id", None)
     _last_track[chat_id] = media
+    if play_hook:
+        try:
+            play_hook(chat_id, media)
+        except Exception:
+            pass
     if getattr(media, "user", None) != "Autoplay":
         _anchor[chat_id] = media   # a human picked it -> this sets the mood
     if vid:
