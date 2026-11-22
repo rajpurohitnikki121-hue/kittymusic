@@ -473,6 +473,34 @@ class MongoDB:
         doc = await self.cache.find_one({"_id": "sudoers"})
         return doc.get("user_ids", []) if doc else []
 
+    # PLAY STATS (how many songs the bot played, and for whom)
+    async def add_play_stat(self, user_id=None) -> None:
+        """Count one played song. user_id=None means an autoplay song."""
+        inc = {"total": 1}
+        inc[f"users.{user_id}" if user_id else "autoplay"] = 1
+        await self.cache.update_one(
+            {"_id": "playstats"}, {"$inc": inc}, upsert=True
+        )
+
+    async def get_play_stats(self) -> dict:
+        doc = await self.cache.find_one({"_id": "playstats"})
+        return doc or {}
+
+    # SONG GUESS GAME SCORES (per chat)
+    async def guess_add(self, chat_id: int, user_id: int, name: str, pts: int) -> None:
+        await self.cache.update_one(
+            {"_id": f"guess:{chat_id}"},
+            {"$inc": {f"u.{user_id}.pts": pts, f"u.{user_id}.wins": 1},
+             "$set": {f"u.{user_id}.name": name}},
+            upsert=True,
+        )
+
+    async def guess_top(self, chat_id: int, limit: int = 10) -> list:
+        doc = await self.cache.find_one({"_id": f"guess:{chat_id}"})
+        rows = list((doc or {}).get("u", {}).values())
+        rows.sort(key=lambda r: r.get("pts", 0), reverse=True)
+        return rows[:limit]
+
     # USER METHODS
     async def is_user(self, user_id: int) -> bool:
         return user_id in self.users
