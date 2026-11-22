@@ -232,6 +232,7 @@ class Inline:
                 [
                     self.ikb(text=_b("Tag All"), callback_data="tagall_info", style=ButtonStyle.PRIMARY),
                     self.ikb(text=_b("Autoplay"), callback_data="autoplay_info", style=ButtonStyle.PRIMARY),
+                    self.ikb(text=_b("Game"), callback_data="guess_info", style=ButtonStyle.PRIMARY),
                 ],
                 [
                     self.ikb(text=_b("Back"), callback_data="start", style=ButtonStyle.PRIMARY),
