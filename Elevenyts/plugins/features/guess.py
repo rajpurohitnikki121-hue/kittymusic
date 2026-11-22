@@ -124,6 +124,7 @@ SONGS = [
 ]
 
 ROUND_TIME = 90      # seconds before the round ends by itself
+RESULT_TTL = 30      # seconds the result message stays before it is deleted
 POINTS = (5, 3, 1)   # points for 0 / 1 / 2 hints used
 MAX_HINTS = 2
 
@@ -183,21 +184,42 @@ async def _edit(msg, text: str, markup=None) -> None:
         pass
 
 
+async def _del(msg) -> None:
+    try:
+        await msg.delete()
+    except Exception:
+        pass
+
+
+async def _del_later(msg, delay: int) -> None:
+    await asyncio.sleep(delay)
+    await _del(msg)
+
+
+async def _finish(chat_id: int, g: dict, send) -> None:
+    """Round is over: delete the round card, post the result and delete the
+    result after RESULT_TTL seconds. `send` is a coroutine function that
+    sends the result text and returns the sent message."""
+    await _del(g["msg"])
+    res = await send()
+    if res:
+        asyncio.get_event_loop().create_task(_del_later(res, RESULT_TTL))
+
+
 async def _run(chat_id: int, g: dict) -> None:
     """Timer: the round ends by itself after ROUND_TIME seconds."""
     try:
         await asyncio.sleep(ROUND_TIME)
         if games.get(chat_id) is g:
             games.pop(chat_id, None)
-            await _edit(g["msg"], _card(g))
-            await app.send_message(
+            await _finish(chat_id, g, lambda: app.send_message(
                 chat_id,
                 "<blockquote>⏰ <b>ᴛɪᴍᴇ ᴜᴘ!</b></blockquote>\n"
                 f"<blockquote>🎵 ᴀɴsᴡᴇʀ  ›  <b>{html.escape(g['title'])}</b>\n"
                 f"🎤 sɪɴɢᴇʀ  ›  {html.escape(g['singer'])}\n"
                 f"🎬 ᴍᴏᴠɪᴇ  ›  {html.escape(g['movie'])}</blockquote>\n"
                 "🔁 ɴᴇxᴛ ʀᴏᴜɴᴅ: /guess",
-            )
+            ))
     except asyncio.CancelledError:
         pass
     except Exception:
@@ -208,7 +230,10 @@ async def _run(chat_id: int, g: dict) -> None:
 async def guess_start(_, m: types.Message):
     chat_id = m.chat.id
     if chat_id in games:
-        return await m.reply_text("⚠️ <i>ᴀ ʀᴏᴜɴᴅ ɪs ᴀʟʀᴇᴀᴅʏ ʀᴜɴɴɪɴɢ. ɢᴜᴇss ɪᴛ ꜰɪʀsᴛ!</i>")
+        warn = await m.reply_text("⚠️ <i>ᴀ ʀᴏᴜɴᴅ ɪs ᴀʟʀᴇᴀᴅʏ ʀᴜɴɴɪɴɢ. ɢᴜᴇss ɪᴛ ꜰɪʀsᴛ!</i>")
+        asyncio.get_event_loop().create_task(_del_later(warn, 8))
+        asyncio.get_event_loop().create_task(_del_later(m, 8))
+        return
 
     used = _recent.setdefault(chat_id, [])
     pool = [s for s in SONGS if s[0] not in used] or SONGS
@@ -220,6 +245,7 @@ async def guess_start(_, m: types.Message):
     g = {"title": title, "movie": movie, "singer": singer, "level": 0, "chat_id": chat_id}
     games[chat_id] = g
     g["msg"] = await m.reply_text(_card(g), reply_markup=_markup(g))
+    await _del(m)   # remove the /guess command message
     g["task"] = asyncio.get_event_loop().create_task(_run(chat_id, g))
 
 
@@ -250,14 +276,14 @@ async def guess_answer(_, m: types.Message):
         await db.guess_add(m.chat.id, m.from_user.id, name, pts)
     except Exception:
         pass
-    await m.reply_text(
+    await _finish(m.chat.id, g, lambda: m.reply_text(
         "<blockquote>🎉 <b>ᴄᴏʀʀᴇᴄᴛ ᴀɴsᴡᴇʀ!</b></blockquote>\n"
         f"<blockquote>👑 ᴡɪɴɴᴇʀ  ›  {m.from_user.mention}\n"
         f"🎵 sᴏɴɢ  ›  <b>{html.escape(g['title'])}</b>\n"
         f"🎤 sɪɴɢᴇʀ  ›  {html.escape(g['singer'])}\n"
         f"⭐ ᴘᴏɪɴᴛs  ›  <b>+{pts}</b></blockquote>\n"
         "🔁 ɴᴇxᴛ ʀᴏᴜɴᴅ: /guess"
-    )
+    ))
 
 
 GAME_INFO_TEXT = (
@@ -312,14 +338,17 @@ async def guess_hint(_, q):
 async def guess_end(_, m: types.Message):
     g = games.pop(m.chat.id, None)
     if not g:
-        return await m.reply_text("No round is running. Start one with /guess")
+        info = await m.reply_text("No round is running. Start one with /guess")
+        asyncio.get_event_loop().create_task(_del_later(info, 8))
+        return await _del(m)
     try:
         g["task"].cancel()
     except Exception:
         pass
-    await m.reply_text(
+    await _finish(m.chat.id, g, lambda: m.reply_text(
         f"<blockquote>🛑 <b>ʀᴏᴜɴᴅ ᴇɴᴅᴇᴅ</b>\n🎵 ᴀɴsᴡᴇʀ  ›  <b>{html.escape(g['title'])}</b></blockquote>"
-    )
+    ))
+    await _del(m)   # remove the /guessend command message
 
 
 @app.on_message(filters.command(["guesstop"]) & filters.group & ~app.bl_users)
