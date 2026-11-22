@@ -1,11 +1,12 @@
 # Song Guess game.
 #   /guess      - start a round (bot shows movie + singer + hidden title)
-#   /guessend   - any member: end the round and show the answer
+#   /endguess   - end the round early (admins/sudo; members must wait for the timer)
 #   /guesstop   - leaderboard of this group
 # Tough mode: at the start the SINGER, the MOVIE and the blanks of the title
 # are shown. The "Hint" button (max 2 hints) reveals more letters:
 #   hint 1 -> first & last letter of every word
-#   hint 2 -> even more letters
+#   hint 2 -> a few more letters (a word is NEVER shown fully)
+# A song is not repeated in the same group on the same day.
 # The first person to type the correct song name wins:
 #   5 points (no hint) / 3 points (1 hint) / 1 point (2 hints)
 import asyncio
@@ -13,6 +14,8 @@ import difflib
 import html
 import random
 import re
+import time
+from datetime import datetime, timedelta, timezone
 
 from pyrogram import filters, types
 from pyrogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
@@ -129,7 +132,8 @@ POINTS = (5, 3, 1)   # points for 0 / 1 / 2 hints used
 MAX_HINTS = 2
 
 games: dict = {}     # chat_id -> round info
-_recent: dict = {}   # chat_id -> titles used lately (avoid repeats)
+_recent: dict = {}   # chat_id -> (day, [titles already used that day])
+_IST = timezone(timedelta(hours=5, minutes=30))
 
 
 def _norm(t: str) -> str:
@@ -137,18 +141,26 @@ def _norm(t: str) -> str:
 
 
 def _mask(title: str, level: int) -> str:
-    """Hidden title. level 0: only blanks. 1: first + last letter of each
-    word. 2: also every 2nd letter."""
+    """Hidden title: one blank per letter.
+    level 1: first + last letter of each word; level 2: a few more.
+    A word is never shown completely (at least one letter stays hidden)."""
     words = []
     for w in title.split():
+        idx = [i for i, ch in enumerate(w) if ch.isalnum()]
+        n = len(idx)
+        show = set()
+        if level >= 1 and n:
+            show.add(0)
+            if n >= 3:
+                show.add(n - 1)
+        if level >= 2 and n >= 4:
+            show.update(range(0, n, 2))
+        if n >= 2 and len(show) >= n:      # never reveal the whole word
+            show.discard(n // 2)
+        pos = {idx[k]: k for k in range(n)}
         out = []
-        n = len(w)
         for i, ch in enumerate(w):
-            if not ch.isalnum():
-                out.append(ch)
-            elif level >= 1 and (i == 0 or i == n - 1):
-                out.append(ch)
-            elif level >= 2 and i % 2 == 0:
+            if i not in pos or pos[i] in show:
                 out.append(ch)
             else:
                 out.append("_")
@@ -235,14 +247,19 @@ async def guess_start(_, m: types.Message):
         asyncio.get_event_loop().create_task(_del_later(m, 8))
         return
 
-    used = _recent.setdefault(chat_id, [])
-    pool = [s for s in SONGS if s[0] not in used] or SONGS
-    if len(pool) == len(SONGS):
-        used.clear()
+    today = datetime.now(_IST).strftime("%Y-%m-%d")
+    day, used = _recent.get(chat_id, (today, []))
+    if day != today:
+        used = []                      # new day -> fresh list
+    pool = [x for x in SONGS if x[0] not in used]
+    if not pool:                       # all 100 songs used today: start over
+        used = []
+        pool = list(SONGS)
+    _recent[chat_id] = (today, used)
     title, movie, singer = random.choice(pool)
     used.append(title)
 
-    g = {"title": title, "movie": movie, "singer": singer, "level": 0, "chat_id": chat_id}
+    g = {"title": title, "movie": movie, "singer": singer, "level": 0, "chat_id": chat_id, "t0": time.time()}
     games[chat_id] = g
     g["msg"] = await m.reply_text(_card(g), reply_markup=_markup(g))
     await _del(m)   # remove the /guess command message
@@ -298,7 +315,7 @@ GAME_INFO_TEXT = (
     "<b>Commands</b>\n"
     "/guess - start a round\n"
     "/guesstop - leaderboard\n"
-    "/guessend - end the round (anyone)"
+    "/endguess - end early (admins; others wait for the timer)"
 )
 
 
@@ -334,13 +351,22 @@ async def guess_hint(_, q):
     await _edit(g["msg"], _card(g), _markup(g))
 
 
-@app.on_message(filters.command(["guessend"]) & filters.group & ~app.bl_users)
+@app.on_message(filters.command(["endguess"]) & filters.group & ~app.bl_users)
 async def guess_end(_, m: types.Message):
-    g = games.pop(m.chat.id, None)
+    g = games.get(m.chat.id)
     if not g:
         info = await m.reply_text("No round is running. Start one with /guess")
         asyncio.get_event_loop().create_task(_del_later(info, 8))
         return await _del(m)
+    # The answer is only shown after the full round time. Before that only
+    # admins / sudo users can end the round early.
+    left = int(ROUND_TIME - (time.time() - g["t0"]))
+    uid = m.from_user.id if m.from_user else 0
+    if left > 0 and uid not in app.sudoers and uid not in await db.get_admins(m.chat.id):
+        wait = await m.reply_text(f"⏳ <i>ᴡᴀɪᴛ {left}s — ᴛʜᴇ ᴀɴsᴡᴇʀ ᴄᴏᴍᴇs ᴀꜰᴛᴇʀ {ROUND_TIME} sᴇᴄᴏɴᴅs.</i>")
+        asyncio.get_event_loop().create_task(_del_later(wait, 6))
+        return await _del(m)
+    games.pop(m.chat.id, None)
     try:
         g["task"].cancel()
     except Exception:
@@ -348,7 +374,7 @@ async def guess_end(_, m: types.Message):
     await _finish(m.chat.id, g, lambda: m.reply_text(
         f"<blockquote>🛑 <b>ʀᴏᴜɴᴅ ᴇɴᴅᴇᴅ</b>\n🎵 ᴀɴsᴡᴇʀ  ›  <b>{html.escape(g['title'])}</b></blockquote>"
     ))
-    await _del(m)   # remove the /guessend command message
+    await _del(m)   # remove the /endguess command message
 
 
 @app.on_message(filters.command(["guesstop"]) & filters.group & ~app.bl_users)
