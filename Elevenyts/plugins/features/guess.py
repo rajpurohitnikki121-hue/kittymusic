@@ -1,5 +1,5 @@
 # Song Guess game.
-#   /guess      - start a round (bot shows movie + singer + hidden title)
+#   /guess      - start a round (works in groups and in the bot's DM) (bot shows movie + singer + hidden title)
 #   /endguess   - end the round early (admins/sudo; members must wait for the timer)
 #   /guesstop   - leaderboard of this group
 # Tough mode: at the start the SINGER, the MOVIE and the blanks of the title
@@ -11,6 +11,7 @@
 #   5 points (no hint) / 3 points (1 hint) / 1 point (2 hints)
 import asyncio
 import difflib
+import logging
 import html
 import random
 import re
@@ -21,6 +22,8 @@ from pyrogram import filters, types
 from pyrogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
 
 from Elevenyts import app, db
+
+logger = logging.getLogger(__name__)
 
 # (song title, movie / album, singer)
 SONGS = [
@@ -126,7 +129,7 @@ SONGS = [
     ("Aaoge Jab Tum", "Jab We Met", "Ustad Rashid Khan"),
 ]
 
-ROUND_TIME = 90      # seconds before the round ends by itself
+ROUND_TIME = 60      # seconds before the round ends by itself
 RESULT_TTL = 30      # seconds the result message stays before it is deleted
 POINTS = (5, 3, 1)   # points for 0 / 1 / 2 hints used
 MAX_HINTS = 2
@@ -238,7 +241,7 @@ async def _run(chat_id: int, g: dict) -> None:
         pass
 
 
-@app.on_message(filters.command(["guess", "songguess"]) & filters.group & ~app.bl_users)
+@app.on_message(filters.command(["guess", "songguess"]) & (filters.group | filters.private) & ~app.bl_users)
 async def guess_start(_, m: types.Message):
     chat_id = m.chat.id
     if chat_id in games:
@@ -266,18 +269,35 @@ async def guess_start(_, m: types.Message):
     g["task"] = asyncio.get_event_loop().create_task(_run(chat_id, g))
 
 
-@app.on_message(filters.text & filters.group & ~app.bl_users, group=11)
+@app.on_message(filters.text & (filters.group | filters.private) & ~app.bl_users, group=11)
 async def guess_answer(_, m: types.Message):
     g = games.get(m.chat.id)
-    if not g or not m.from_user or not m.text or m.text.startswith(("/", "!")):
+    if not g or not m.text or m.text.startswith(("/", "!")):
         return
+    # Who answered? Normal user, or an anonymous admin / channel (no from_user).
+    u = m.from_user
+    if u:
+        uid, name, mention = u.id, (u.first_name or "User"), u.mention
+    else:
+        sc = getattr(m, "sender_chat", None)
+        if not sc:
+            return
+        uid = sc.id
+        name = "Anonymous Admin" if sc.id == m.chat.id else (sc.title or "Channel")
+        mention = html.escape(name)
     guess, answer = _norm(m.text), _norm(g["title"])
     if not guess:
         return
-    ok = guess == answer or (
-        len(guess) >= 4
-        and difflib.SequenceMatcher(None, guess, answer).ratio() >= 0.88
+    ok = (
+        guess == answer
+        # "ae watan song", "Ae Watan - Raazi" etc. (answer inside a short text)
+        or (len(answer) >= 4 and answer in guess and len(guess) <= len(answer) + 12)
+        or (
+            len(guess) >= 4
+            and difflib.SequenceMatcher(None, guess, answer).ratio() >= 0.88
+        )
     )
+    logger.info(f"guess: chat={m.chat.id} typed='{guess}' answer='{answer}' ok={ok}")
     if not ok:
         return
     # first correct answer wins
@@ -288,14 +308,13 @@ async def guess_answer(_, m: types.Message):
     except Exception:
         pass
     pts = POINTS[g["level"]]
-    name = m.from_user.first_name or "User"
     try:
-        await db.guess_add(m.chat.id, m.from_user.id, name, pts)
+        await db.guess_add(m.chat.id, uid, name, pts)
     except Exception:
         pass
     await _finish(m.chat.id, g, lambda: m.reply_text(
         "<blockquote>🎉 <b>ᴄᴏʀʀᴇᴄᴛ ᴀɴsᴡᴇʀ!</b></blockquote>\n"
-        f"<blockquote>👑 ᴡɪɴɴᴇʀ  ›  {m.from_user.mention}\n"
+        f"<blockquote>👑 ᴡɪɴɴᴇʀ  ›  {mention}\n"
         f"🎵 sᴏɴɢ  ›  <b>{html.escape(g['title'])}</b>\n"
         f"🎤 sɪɴɢᴇʀ  ›  {html.escape(g['singer'])}\n"
         f"⭐ ᴘᴏɪɴᴛs  ›  <b>+{pts}</b></blockquote>\n"
@@ -306,7 +325,7 @@ async def guess_answer(_, m: types.Message):
 GAME_INFO_TEXT = (
     "<u><b>❖ ɢᴜᴇss ᴛʜᴇ sᴏɴɢ</b></u>\n\n"
     "<b>How to play</b>\n"
-    "1. Type /guess in the group.\n"
+    "1. Type /guess in a group (or in the bot's DM).\n"
     "2. The bot shows the singer, the movie and the hidden song name.\n"
     "3. Type the correct song name in chat. First one wins!\n"
     "4. Stuck? Tap 💡 Hint (2 hints) to reveal letters.\n\n"
@@ -351,7 +370,7 @@ async def guess_hint(_, q):
     await _edit(g["msg"], _card(g), _markup(g))
 
 
-@app.on_message(filters.command(["endguess"]) & filters.group & ~app.bl_users)
+@app.on_message(filters.command(["endguess"]) & (filters.group | filters.private) & ~app.bl_users)
 async def guess_end(_, m: types.Message):
     g = games.get(m.chat.id)
     if not g:
@@ -362,7 +381,8 @@ async def guess_end(_, m: types.Message):
     # admins / sudo users can end the round early.
     left = int(ROUND_TIME - (time.time() - g["t0"]))
     uid = m.from_user.id if m.from_user else 0
-    if left > 0 and uid not in app.sudoers and uid not in await db.get_admins(m.chat.id):
+    is_dm = m.chat.id > 0          # private chat with the bot
+    if left > 0 and not is_dm and uid not in app.sudoers and uid not in await db.get_admins(m.chat.id):
         wait = await m.reply_text(f"⏳ <i>ᴡᴀɪᴛ {left}s — ᴛʜᴇ ᴀɴsᴡᴇʀ ᴄᴏᴍᴇs ᴀꜰᴛᴇʀ {ROUND_TIME} sᴇᴄᴏɴᴅs.</i>")
         asyncio.get_event_loop().create_task(_del_later(wait, 6))
         return await _del(m)
@@ -377,7 +397,7 @@ async def guess_end(_, m: types.Message):
     await _del(m)   # remove the /endguess command message
 
 
-@app.on_message(filters.command(["guesstop"]) & filters.group & ~app.bl_users)
+@app.on_message(filters.command(["guesstop"]) & (filters.group | filters.private) & ~app.bl_users)
 async def guess_top(_, m: types.Message):
     rows = await db.guess_top(m.chat.id)
     if not rows:
