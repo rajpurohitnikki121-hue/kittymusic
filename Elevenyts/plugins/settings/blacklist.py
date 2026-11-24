@@ -13,9 +13,35 @@
 # Unauthorized copying, modification, or redistribution
 # of this source code without permission is prohibited.
 # ==========================================================
-from pyrogram import filters, types
+from pyrogram import StopPropagation, filters, types
 
 from Elevenyts import app, db, lang
+
+
+async def _leave_everywhere(chat_id: int) -> tuple[str, str]:
+    """Make the assistant and the bot leave `chat_id`.
+    Returns (bot_status, assistant_status) as short texts."""
+    asst = "skipped"
+    try:
+        client = await db.get_client(chat_id)
+        await client.leave_chat(chat_id)
+        asst = "left ✅"
+    except Exception as e:
+        asst = f"not in chat / failed ({type(e).__name__})"
+    try:
+        await app.leave_chat(chat_id)
+        bot = "left ✅"
+    except Exception as e:
+        bot = f"failed ({type(e).__name__}) - will leave on its first message"
+    return bot, asst
+
+
+@app.on_message(filters.group, group=-2)
+async def _blacklisted_chat_guard(_, m: types.Message):
+    """Any message in a blacklisted chat -> bot and assistant leave at once."""
+    if m.chat and m.chat.id in db.blacklisted:
+        await _leave_everywhere(m.chat.id)
+        raise StopPropagation
 
 
 #  ============== CHAT BLACKLIST COMMANDS ==============
@@ -38,22 +64,28 @@ async def _blacklist_chat(_, m: types.Message):
 
     try:
         chat_id = int(m.command[1])
-        chat = await app.get_chat(chat_id)
     except ValueError:
         return await m.reply_text("<blockquote>❌ Invalid chat ID</blockquote>")
+
+    # The title is only for display. Even if the bot cannot look the chat up
+    # (not a member / unknown to its session) the chat is still blacklisted.
+    try:
+        title = (await app.get_chat(chat_id)).title
     except Exception:
-        return await m.reply_text("<blockquote>❌ Chat not found</blockquote>")
+        title = f"Chat {chat_id}"
 
-    if chat_id in db.blacklisted:
-        return await m.reply_text(
-            f"<blockquote>⚠️ {chat.title} is already blacklisted</blockquote>"
-        )
+    already = chat_id in db.blacklisted
+    if not already:
+        await db.add_blacklist(chat_id)
 
-    await db.add_blacklist(chat_id)
+    bot_st, asst_st = await _leave_everywhere(chat_id)
+
     await m.reply_text(
-        f"<blockquote><u><b>✅ ᴄʜᴀᴛ ʙʟᴀᴄᴋʟɪꜱᴛᴇᴅ</b></u>\n\n"
-        f"<b>ᴄʜᴀᴛ:</b> {chat.title}\n"
-        f"<b>ɪᴅ:</b> <code>{chat_id}</code></blockquote>"
+        f"<blockquote><u><b>{'⚠️ ᴀʟʀᴇᴀᴅʏ ʙʟᴀᴄᴋʟɪꜱᴛᴇᴅ' if already else '✅ ᴄʜᴀᴛ ʙʟᴀᴄᴋʟɪꜱᴛᴇᴅ'}</b></u>\n\n"
+        f"<b>ᴄʜᴀᴛ:</b> {title}\n"
+        f"<b>ɪᴅ:</b> <code>{chat_id}</code>\n"
+        f"<b>ʙᴏᴛ:</b> {bot_st}\n"
+        f"<b>ᴀꜱꜱɪꜱᴛᴀɴᴛ:</b> {asst_st}</blockquote>"
     )
 
 
