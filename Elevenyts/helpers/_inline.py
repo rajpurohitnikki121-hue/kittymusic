@@ -57,9 +57,21 @@ def _g(text: str) -> str:
     return "".join(_LIGHT.get(ch, ch) for ch in text)
 
 
+# Small-caps / greek mix font used for the bracket buttons: ᴀᴅϻɪηѕ
+_SMALL = dict(zip(
+    "abcdefghijklmnopqrstuvwxyz",
+    "\u03b1\u0299\u1d04\u1d05\u0454\u0493\u0262\u043d\u026a\u1d0a\u1d0b\u029f\u03fb"
+    "\u03b7\u03c3\u1d18\u01eb\u0280\u0455\u1d1b\u03c5\u1d20\u1d21x\u028f\u1d22",
+))
+
+
+def _t(text: str) -> str:
+    return "".join(_SMALL.get(ch, ch) for ch in text.lower())
+
+
 def _b(text: str) -> str:
-    """Bracket style label:  \u231C 𝖮𝗐𝗇𝖾𝗋 \u231F"""
-    return f"\u231C {_g(text)} \u231F"
+    """Bracket style label:  \u231C \u1d00\u1d05\u03fb\u026a\u03b7\u0455 \u231F"""
+    return f"\u231C {_t(text)} \u231F"
 
 
 def _f(text: str) -> str:
@@ -202,42 +214,31 @@ class Inline:
                 ]
             ]
         else:
-            # Help menu with categorized buttons (3 per row)
-            rows = [
-                [
-                    self.ikb(text=_b("Admins"), callback_data="help_admins", style=ButtonStyle.PRIMARY),
-                    self.ikb(text=_b("Auth"), callback_data="help_auth", style=ButtonStyle.PRIMARY),
-                    self.ikb(text=_b("Broadcast"), callback_data="help_broadcast", style=ButtonStyle.PRIMARY),
-                ],
-                [
-                    self.ikb(text=_b("BL-Chat"), callback_data="help_blchat", style=ButtonStyle.PRIMARY),
-                    self.ikb(text=_b("BL-User"), callback_data="help_bluser", style=ButtonStyle.PRIMARY),
-                    self.ikb(text=_b("G-Ban"), callback_data="help_gban", style=ButtonStyle.PRIMARY),
-                ],
-                [
-                    self.ikb(text=_b("Loop"), callback_data="help_loop", style=ButtonStyle.PRIMARY),
-                    self.ikb(text=_b("Play"), callback_data="help_play", style=ButtonStyle.PRIMARY),
-                    self.ikb(text=_b("Queue"), callback_data="help_queue", style=ButtonStyle.PRIMARY),
-                ],
-                [
-                    self.ikb(text=_b("Seek"), callback_data="help_seek", style=ButtonStyle.PRIMARY),
-                    self.ikb(text=_b("Shuffle"), callback_data="help_shuffle", style=ButtonStyle.PRIMARY),
-                    self.ikb(text=_b("Ping"), callback_data="help_ping", style=ButtonStyle.PRIMARY),
-                ],
-                [
-                    self.ikb(text=_b("Stats"), callback_data="help_stats", style=ButtonStyle.PRIMARY),
-                    self.ikb(text=_b("Sudo"), callback_data="help_sudo", style=ButtonStyle.PRIMARY),
-                    self.ikb(text=_b("Maintenance"), callback_data="help_maintenance", style=ButtonStyle.PRIMARY),
-                ],
-                [
-                    self.ikb(text=_b("Tag All"), callback_data="tagall_info", style=ButtonStyle.PRIMARY),
-                    self.ikb(text=_b("Autoplay"), callback_data="autoplay_info", style=ButtonStyle.PRIMARY),
-                    self.ikb(text=_b("Game"), callback_data="guess_info", style=ButtonStyle.PRIMARY),
-                ],
-                [
-                    self.ikb(text=_b("Back"), callback_data="start", style=ButtonStyle.PRIMARY),
-                ]
+            # Help menu with categorized buttons (3 per row), colours rotate
+            # red / blue / green like the reference bot.
+            items = [
+                [("Admins", "help_admins"), ("Auth", "help_auth"), ("Broadcast", "help_broadcast")],
+                [("BL-Chat", "help_blchat"), ("BL-User", "help_bluser"), ("G-Ban", "help_gban")],
+                [("Loop", "help_loop"), ("Play", "help_play"), ("Queue", "help_queue")],
+                [("Seek", "help_seek"), ("Shuffle", "help_shuffle"), ("Ping", "help_ping")],
+                [("Stats", "help_stats"), ("Sudo", "help_sudo"), ("Maintenance", "help_maintenance")],
+                [("Tag All", "tagall_info"), ("Autoplay", "autoplay_info"), ("Game", "guess_info")],
             ]
+            cycle = ["DANGER", "PRIMARY", "SUCCESS"]
+            rows = []
+            for r, row in enumerate(items):
+                rows.append([
+                    self.ikb(
+                        text=_b(label),
+                        callback_data=cb,
+                        **self._style(cycle[(c - r) % 3]),
+                    )
+                    for c, (label, cb) in enumerate(row)
+                ])
+            rows.append([
+                self.ikb(text=_b("Back"), callback_data="start", **self._style("DANGER")),
+                self.ikb(text=_b("Support"), url=config.SUPPORT_CHANNEL, **self._style("PRIMARY")),
+            ])
         return self.ikm(rows)
 
     def ping_markup(self, text: str) -> types.InlineKeyboardMarkup:
@@ -342,6 +343,8 @@ class Inline:
     ) -> types.InlineKeyboardMarkup:
         # Layout + bold serif font + blue buttons, like the reference bot.
         P = ButtonStyle.PRIMARY
+        G = getattr(ButtonStyle, "SUCCESS", P)
+        R = getattr(ButtonStyle, "DANGER", P)
         # Telegram rejects tg://user?id= links on buttons unless the bot has
         # already met that user (the whole /start then fails). So the Owner
         # button is shown only when a normal https://t.me/<username> link
@@ -354,19 +357,19 @@ class Inline:
         if owner_url.startswith("https://"):
             second_row.append(
                 self._start_btn(_b("Owner"), "", "owner",
-                                url=owner_url, style=P))
+                                url=owner_url, style=G))
         rows = [
             [
                 self._start_btn(_b("Commands"), "", "commands",
                                 callback_data="help", style=P),
                 self._start_btn(_b("Support"), "", "support",
-                                url=config.SUPPORT_CHANNEL, style=P),
+                                url=config.SUPPORT_CHANNEL, style=R),
             ],
             second_row,
             [
                 self._start_btn(_b("Add Me"), "", "addme",
                                 url=f"https://t.me/{app.username}?startgroup=true",
-                                style=P),
+                                style=G),
             ],
         ]
         return self.ikm(rows)
@@ -379,4 +382,4 @@ class Inline:
                     self.ikb(text=f"{S_PLAY} {_f('Open In YouTube')}", url=link),
                 ],
             ]
-)
+                                  )
