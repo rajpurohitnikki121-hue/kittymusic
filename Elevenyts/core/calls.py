@@ -977,6 +977,21 @@ class TgCall(PyTgCalls):
 
                 target_chat = message_chat_id if message_chat_id else chat_id
 
+                # The song that just ended: delete its "NOW PLAYING" message.
+                # (The next song then posts its own player, or the chat stays
+                # clean when the queue is over.)
+                try:
+                    _prev = queue.get_current(chat_id)
+                    if _prev and _prev.message_id:
+                        await app.delete_messages(
+                            chat_id=target_chat,
+                            message_ids=_prev.message_id,
+                            revoke=True,
+                        )
+                        _prev.message_id = 0
+                except Exception as e:
+                    logger.debug(f"Could not delete finished player in {chat_id}: {e}")
+
                 loop_mode = await db.get_loop(chat_id)
 
                 if loop_mode == 1:
