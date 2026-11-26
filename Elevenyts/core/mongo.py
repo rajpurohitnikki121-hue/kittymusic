@@ -476,7 +476,9 @@ class MongoDB:
     # PLAY STATS (how many songs the bot played, and for whom)
     async def add_play_stat(self, user_id=None) -> None:
         """Count one played song. user_id=None means an autoplay song."""
-        inc = {"total": 1}
+        from datetime import datetime, timedelta, timezone
+        today = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d")
+        inc = {"total": 1, f"days.{today}": 1}
         inc[f"users.{user_id}" if user_id else "autoplay"] = 1
         await self.cache.update_one(
             {"_id": "playstats"}, {"$inc": inc}, upsert=True
